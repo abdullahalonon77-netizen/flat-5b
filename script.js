@@ -2256,3 +2256,26 @@ if (printBtn) {
         }
     });
 }
+// Image Export Logic for Meal Calendar
+window.exportMealCalendarToImage = function() {
+    const calendarElement = document.getElementById('meal-calendar');
+    if (!calendarElement) return showToast('ক্যালেন্ডার পাওয়া যায়নি!', 'error');
+
+    showToast('ইমেজ তৈরি হচ্ছে, দয়া করে অপেক্ষা করুন...', 'success');
+    
+    if (typeof html2canvas !== 'undefined') {
+        html2canvas(calendarElement, { scale: 2, useCORS: true }).then(canvas => {
+            const link = document.createElement('a');
+            const monthText = document.getElementById('currentMonthYear') ? document.getElementById('currentMonthYear').innerText.replace(/\s+/g, '_') : 'Month';
+            link.download = `Flat_5B_Meal_Report_${monthText}.jpg`;
+            link.href = canvas.toDataURL('image/jpeg', 0.98);
+            link.click();
+            showToast('ইমেজ সফলভাবে ডাউনলোড হয়েছে!', 'success');
+        }).catch(err => {
+            console.error(err);
+            showToast('ইমেজ ডাউনলোডে সমস্যা হয়েছে।', 'error');
+        });
+    } else {
+        showToast('System Error: html2canvas is missing!', 'error');
+    }
+};

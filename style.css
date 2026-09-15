@@ -1770,20 +1770,7 @@ tbody td {
     text-align: center;
 }
 
-.btn-enter-website {
-    width: 100%;
-    padding: 18px;
-    font-size: 22px;
-    border-radius: 30px;
-    background: var(--grad-green);
-    color: #111c43;
-    font-weight: 800;
-    box-shadow: 0 10px 25px rgba(56, 249, 215, 0.4);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 10px;
-}
+.btn-enter-website { width: 100%; padding: 15px; font-size: 20px; border-radius: 30px; background: var(--grad-green); color: #111c43; font-weight: 800; box-shadow: 0 10px 25px rgba(56, 249, 215, 0.4); display: flex; flex-direction: row; align-items: center; justify-content: center; gap: 10px; height: auto; }
 
 .btn-enter-website:hover {
     transform: translateY(-3px);
@@ -2020,7 +2007,7 @@ tbody td {
 
 /* Login Modal Boro Kora */
 .login-modal-box {
-    max-width: 600px !important; /* Box er size boro kora holo */
+    max-width: 420px !important;
 }
 
 .login-select {
@@ -2073,24 +2060,5 @@ tbody td {
 .login-modal-box {
     max-width: 420px !important;
 }
-.btn-enter-website {
-    width: 100%;
-    padding: 15px;
-    font-size: 20px;
-    border-radius: 30px;
-    background: var(--grad-green);
-    color: #111c43;
-    font-weight: 800;
-    box-shadow: 0 10px 25px rgba(56, 249, 215, 0.4);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 10px;
-    flex-direction: row;
-    height: auto;
-}
-.btn-icon-right {
-    width: 24px !important;
-    height: 24px !important;
-    flex-shrink: 0;
-}
+.btn-enter-website { width: 100%; padding: 15px; font-size: 20px; border-radius: 30px; background: var(--grad-green); color: #111c43; font-weight: 800; box-shadow: 0 10px 25px rgba(56, 249, 215, 0.4); display: flex; flex-direction: row; align-items: center; justify-content: center; gap: 10px; height: auto; }
+.btn-icon-right { width: 24px !important; height: 24px !important; flex-shrink: 0; }
