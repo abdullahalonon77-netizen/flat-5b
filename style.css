@@ -1840,6 +1840,10 @@ tbody td {
 }
 
 @media (max-width: 768px) {
+    .app-wrapper {
+        flex-direction: column;
+    }
+    
     .sidebar {
         width: 100%;
         height: auto;
