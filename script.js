@@ -2219,3 +2219,40 @@ for (let d = 1; d < new Date().getDate(); d++) {
 } 
 saveData(); 
 refreshAll();
+
+// Print Report functionality
+const printBtn = document.getElementById('printReportBtn');
+if (printBtn) {
+    const newPrintBtn = printBtn.cloneNode(true);
+    printBtn.replaceWith(newPrintBtn);
+    newPrintBtn.addEventListener('click', function() {
+        const summaryContent = document.getElementById('monthlySummaryContent');
+        if (!summaryContent || summaryContent.innerText.includes('কোনো তথ্য পাওয়া যায়নি')) {
+            return showToast('প্রিন্ট করার মতো কোনো ডেটা নেই!', 'error');
+        }
+        showToast('পিডিএফ তৈরি হচ্ছে, দয়া করে অপেক্ষা করুন...', 'success');
+        const sourceTable = summaryContent.querySelector('table');
+        const pdfHead = document.getElementById('pdfExportHead');
+        const pdfBody = document.getElementById('pdfExportBody');
+        if (sourceTable && pdfHead && pdfBody) {
+            pdfHead.innerHTML = sourceTable.querySelector('thead').innerHTML;
+            pdfBody.innerHTML = sourceTable.querySelector('tbody').innerHTML;
+            const selectEl = document.getElementById('reportMonthSelect');
+            const monthText = selectEl ? selectEl.options[selectEl.selectedIndex].text : '';
+            document.getElementById('pdfMonthYear').innerText = `মাস: ${monthText}`;
+            const printArea = document.getElementById('pdfPrintArea');
+            printArea.style.display = 'block';
+            const opt = {
+                margin: 0.5,
+                filename: `Flat_5B_Monthly_Report_${monthText}.pdf`,
+                image: { type: 'jpeg', quality: 0.98 },
+                html2canvas: { scale: 2, useCORS: true },
+                jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' }
+            };
+            html2pdf().set(opt).from(printArea).save().then(() => {
+                printArea.style.display = 'none';
+                showToast('পিডিএফ সফলভাবে ডাউনলোড হয়েছে!', 'success');
+            });
+        }
+    });
+}
