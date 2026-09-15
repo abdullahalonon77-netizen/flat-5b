@@ -68,6 +68,8 @@
 
 html {
     scroll-behavior: smooth;
+    overflow-x: hidden;
+    width: 100%;
 }
 
 body {
@@ -76,8 +78,10 @@ body {
     font-size: 16px;
     line-height: 1.6;
     overflow-x: hidden;
+    width: 100%;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    background-image: none;
 }
 
 h1, 
@@ -1630,18 +1634,20 @@ tbody td {
    23. Modals & Overlay (Glassmorphism)
    -------------------------------------------------------------------------- */
 .modal-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100vw;
-    height: 100vh;
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
     background: rgba(17, 28, 67, 0.6);
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
     display: flex;
     align-items: center;
     justify-content: center;
-    z-index: 1000;
+    z-index: 99999 !important;
     opacity: 0;
     visibility: hidden;
     transition: var(--transition-normal);
