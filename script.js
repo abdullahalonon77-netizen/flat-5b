@@ -88,10 +88,14 @@ onValue(ref(db, 'flat5b_data'), (snapshot) => {
     const currentActiveUser = AppState.activeUserId;
     
     if (data) {
-        // 🔥 ফিক্স: ডিফল্ট স্টেট দিয়ে পুরোটা ওভাররাইট না করে, ফায়ারবেসের ডেটাকে সরাসরি অ্যাসাইন করো
-        AppState = data;
-        
-        // সেফটি চেক: মেম্বার যেন কোনোভাবেই হারিয়ে না যায়
+        // 🔥 নিখুঁত মার্জিং লজিক
+        AppState.currentMonth = data.currentMonth || defaultState.currentMonth;
+        AppState.currentYear = data.currentYear || defaultState.currentYear;
+        AppState.guestMeals = data.guestMeals || {};
+        AppState.vacations = data.vacations || {};
+        AppState.todaysMenu = data.todaysMenu || "";
+
+        // মেম্বারদের তালিকা ফায়ারবেস থেকে নেওয়া, না থাকলে ডিফল্ট রাখা
         if (data.members) {
              AppState.members = Object.values(data.members).filter(Boolean);
         } else {
@@ -100,18 +104,8 @@ onValue(ref(db, 'flat5b_data'), (snapshot) => {
 
         AppState.bazaarRecords = data.bazaarRecords ? Object.values(data.bazaarRecords).filter(Boolean) : [];
         AppState.notices = data.notices ? Object.values(data.notices).filter(Boolean) : [];
-        
-        // বাকি ডেটা ঠিকঠাক রাখা
-        if (!AppState.meals || typeof AppState.meals !== 'object' || Object.keys(AppState.meals).length < 31) {
-            AppState.meals = JSON.parse(JSON.stringify(defaultState.meals));
-        }
-        
-        if (!AppState.guestMeals || typeof AppState.guestMeals !== 'object') {
-            AppState.guestMeals = {};
-        }
-        if (!AppState.vacations || typeof AppState.vacations !== 'object') {
-            AppState.vacations = {};
-        }
+        AppState.meals = data.meals ? data.meals : JSON.parse(JSON.stringify(defaultState.meals));
+        AppState.history = data.history ? data.history : {};
         
         AppState.isAdmin = currentAdminStatus;
         AppState.activeUserId = currentActiveUser;
