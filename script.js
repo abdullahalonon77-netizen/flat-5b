@@ -79,18 +79,17 @@ let AppState = JSON.parse(JSON.stringify(defaultState));
 // Load data from Firebase
 let isInitialLoad = true;
 let isFetching = false;
-onValue(ref(db, 'meal_system_state'), (snapshot) => {
+onValue(ref(db, 'flat5d_data'), (snapshot) => {
     isFetching = true;
     const data = snapshot.val();
     if (data) {
+        AppState = JSON.parse(JSON.stringify(defaultState));
         Object.assign(AppState, data);
+        AppState.members = data.members ? Object.values(data.members) : [];
+        AppState.bazaarRecords = data.bazaarRecords ? Object.values(data.bazaarRecords) : [];
+        AppState.notices = data.notices ? Object.values(data.notices) : [];
         
-        // Fix Members Array Corruption
-        if (!Array.isArray(AppState.members) || AppState.members.length === 0) {
-            AppState.members = JSON.parse(JSON.stringify(defaultState.members));
-        }
-        
-        // Fix Meals Object Corruption
+        // Fix Meals Object Corruption if needed (already handled by defaultState merge usually, but keep if needed)
         if (!AppState.meals || typeof AppState.meals !== 'object' || Object.keys(AppState.meals).length < 31) {
             AppState.meals = JSON.parse(JSON.stringify(defaultState.meals));
         }
@@ -105,18 +104,17 @@ onValue(ref(db, 'meal_system_state'), (snapshot) => {
         AppState.isAdmin = false;
     } else {
         AppState = JSON.parse(JSON.stringify(defaultState));
-        saveData();
+        set(ref(db, 'flat5d_data'), JSON.parse(JSON.stringify(defaultState)));
     }
     
     if (isInitialLoad) {
         isInitialLoad = false;
-        // Optionally, if we needed to wait before doing things
     }
     
-    if (typeof window.refreshAll === 'function') {
     if (typeof window.checkAndResetNewMonth === "function") {
         window.checkAndResetNewMonth();
     }
+    if (typeof window.refreshAll === 'function') {
         window.refreshAll();
     }
     isFetching = false;
@@ -128,7 +126,7 @@ onValue(ref(db, 'meal_system_state'), (snapshot) => {
 window.saveData = function() {
     if (isFetching) return;
     try {
-        set(ref(db, 'meal_system_state'), AppState);
+        set(ref(db, 'flat5d_data'), AppState);
     } catch (error) {
         console.error("Error saving data to Firebase:", error);
     }
