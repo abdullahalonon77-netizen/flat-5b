@@ -123,8 +123,7 @@ onValue(ref(db, 'flat5b_data'), (snapshot) => {
     if (isInitialLoad) {
         isInitialLoad = false;
     }
-    
-    if (typeof window.checkAndResetNewMonth === "function") {
+    if (typeof window.checkAndResetNewMonth === 'function') {
         window.checkAndResetNewMonth();
     }
     if (typeof window.refreshAll === 'function') {
@@ -360,8 +359,7 @@ if (enterBtn) {
         
         AppState.activeUserId = parseInt(selectedId);
         const activeUser = AppState.members.find(m => m.id === AppState.activeUserId);
-        
-        if (activeUser) {
+        if (activeUser && activeUser.name === 'Onon') {
             const greetingEl = document.getElementById('greetingText');
             if (greetingEl) {
                 greetingEl.innerText = "Welcome, " + activeUser.name + "!";
@@ -394,9 +392,6 @@ if (enterBtn) {
         
         // Call global refresh if available
         if (typeof window.refreshAll === 'function') {
-    if (typeof window.checkAndResetNewMonth === "function") {
-        window.checkAndResetNewMonth();
-    }
             window.refreshAll();
         }
     });
@@ -423,9 +418,6 @@ if (adminLoginBtn) {
             showToast("অ্যাডমিন প্যানেল থেকে লগআউট করা হয়েছে।", "success");
             
             if (typeof window.refreshAll === 'function') {
-    if (typeof window.checkAndResetNewMonth === "function") {
-        window.checkAndResetNewMonth();
-    }
                 window.refreshAll();
             }
         } else {
@@ -470,9 +462,6 @@ if (verifyPasswordBtn) {
             showToast("অ্যাডমিন প্যানেলে সফলভাবে লগিন হয়েছেন!", "success");
             
             if (typeof window.refreshAll === 'function') {
-    if (typeof window.checkAndResetNewMonth === "function") {
-        window.checkAndResetNewMonth();
-    }
                 window.refreshAll();
             }
         } else {
@@ -568,9 +557,6 @@ document.querySelectorAll('.nav-item').forEach(function(navItem) {
         
         // Refresh data whenever a tab is switched to ensure fresh data
         if (typeof window.refreshAll === 'function') {
-    if (typeof window.checkAndResetNewMonth === "function") {
-        window.checkAndResetNewMonth();
-    }
             window.refreshAll();
         }
     });
@@ -955,9 +941,6 @@ if (startGuestBtn) {
         showToast('গেস্ট মিল চালু হয়েছে!', 'success'); 
         
         if (typeof window.refreshAll === 'function') {
-    if (typeof window.checkAndResetNewMonth === "function") {
-        window.checkAndResetNewMonth();
-    }
             window.refreshAll();
         }
     });
@@ -977,9 +960,6 @@ if (stopGuestBtn) {
             showToast('গেস্ট মিল অফ করা হয়েছে!', 'success'); 
             
             if (typeof window.refreshAll === 'function') {
-    if (typeof window.checkAndResetNewMonth === "function") {
-        window.checkAndResetNewMonth();
-    }
                 window.refreshAll();
             }
         }
@@ -1032,9 +1012,6 @@ if (startVacBtn) {
             showToast('ছুটি চালু! সামনের সব মিল অফ করা হয়েছে।', 'success'); 
             
             if (typeof window.refreshAll === 'function') {
-    if (typeof window.checkAndResetNewMonth === "function") {
-        window.checkAndResetNewMonth();
-    }
                 window.refreshAll();
             }
         });
@@ -1052,9 +1029,6 @@ if (stopVacBtn) {
             showToast('ছুটি শেষ! রেগুলার মিল চালু হয়েছে।', 'success'); 
             
             if (typeof window.refreshAll === 'function') {
-    if (typeof window.checkAndResetNewMonth === "function") {
-        window.checkAndResetNewMonth();
-    }
                 window.refreshAll();
             }
         });
@@ -1405,6 +1379,10 @@ window.refreshAll = function() {
     // 1. Save data to storage
     saveData();
     
+    if (typeof populateMemberDropdowns === 'function') {
+        populateMemberDropdowns();
+    }
+    
     // 2. Update Dashboard Stats
     if (typeof updateDashboardStats === 'function') {
         updateDashboardStats();
@@ -1461,9 +1439,6 @@ window.refreshAll = function() {
         reversedNotices.forEach(function(notice, index) {
             let deleteBtnHtml = '';
             if (AppState.isAdmin) {
-    if (typeof window.checkAndResetNewMonth === "function") {
-        window.checkAndResetNewMonth();
-    }
                 deleteBtnHtml = `<button class="btn-delete-notice" style="background:var(--danger-light); color:var(--danger-color); border:none; width:30px; height:30px; border-radius:50%; font-size:18px; font-weight:bold; cursor:pointer;" onclick="customConfirm('এই নোটিশটি মুছে ফেলবেন?', function() { AppState.notices = AppState.notices.filter(x => x.id !== ${notice.id}); window.refreshAll(); })">&times;</button>`;
             }
             
@@ -1633,9 +1608,6 @@ if(saveMealBtn) {
         });
         document.getElementById('editMealModal').classList.remove('show');
         showToast('মিল সফলভাবে আপডেট হয়েছে!', 'success');
-    if (typeof window.checkAndResetNewMonth === "function") {
-        window.checkAndResetNewMonth();
-    }
         window.refreshAll();
     });
 }
@@ -1770,16 +1742,10 @@ window.updateQuickMealToggle = function() {
         if(!this.checked) {
             AppState.meals[info.day][info.type][uid] = 0 + activeGuestCount;
             showToast('আপনার নিজের মিল অফ করা হয়েছে!', 'success');
-    if (typeof window.checkAndResetNewMonth === "function") {
-        window.checkAndResetNewMonth();
-    }
             window.refreshAll();
         } else {
             AppState.meals[info.day][info.type][uid] = 1 + activeGuestCount;
             showToast('আপনার নিজের মিল চালু করা হয়েছে!', 'success');
-    if (typeof window.checkAndResetNewMonth === "function") {
-        window.checkAndResetNewMonth();
-    }
             window.refreshAll();
         }
     });
@@ -1804,18 +1770,12 @@ window.updateQuickMealToggle = function() {
         newBtnFull.addEventListener('click', function() {
             AppState.meals[info.day][info.type][uid] = 1 + activeGuestCount;
             showToast('নিজের মিল ফুল (১) করা হয়েছে!', 'success');
-    if (typeof window.checkAndResetNewMonth === "function") {
-        window.checkAndResetNewMonth();
-    }
             window.refreshAll();
         });
         
         newBtnHalf.addEventListener('click', function() {
             AppState.meals[info.day][info.type][uid] = 0.5 + activeGuestCount;
             showToast('নিজের মিল হাফ (০.৫) করা হয়েছে!', 'success');
-    if (typeof window.checkAndResetNewMonth === "function") {
-        window.checkAndResetNewMonth();
-    }
             window.refreshAll();
         });
     }
@@ -1858,9 +1818,6 @@ window.deleteBazaar = function(id) {
     customConfirm('এই বাজার রেকর্ডটি মুছে ফেলবেন?', function() {
         AppState.bazaarRecords = AppState.bazaarRecords.filter(r => r.id !== id);
         showToast('বাজার রেকর্ড মুছে ফেলা হয়েছে', 'success');
-    if (typeof window.checkAndResetNewMonth === "function") {
-        window.checkAndResetNewMonth();
-    }
         window.refreshAll();
     });
 };
@@ -1871,9 +1828,6 @@ window.removeMember = function(id) {
         function() {
             AppState.members = AppState.members.filter(m => m.id !== id);
             showToast('সদস্য মুছে ফেলা হয়েছে', 'success');
-    if (typeof window.checkAndResetNewMonth === "function") {
-        window.checkAndResetNewMonth();
-    }
             window.refreshAll();
         },
         'delete' // <-- এই তৃতীয় প্যারামিটারটাই ইনপুট বক্স শো করাবে!
@@ -1894,7 +1848,7 @@ const mainEnterBtn = document.getElementById('enterWebsiteBtn');
 if (mainEnterBtn) {
     mainEnterBtn.addEventListener('click', function() {
         const activeUser = AppState.members.find(m => m.id === AppState.activeUserId);
-        if (activeUser if (activeUser && (activeUser.name === 'Onon'))if (activeUser && (activeUser.name === 'Onon')) activeUser.name === 'Onon') {
+        if (activeUser && activeUser.name === "Onon") {
             if (authSection) authSection.style.display = 'block'; // শুধু জুবায়ের/আবিদ হলে দেখাবে
         } else {
             if (authSection) authSection.style.display = 'none'; // অন্যদের জন্য হাইড
@@ -1930,10 +1884,7 @@ if (btnSaveMem) {
         
         document.getElementById('addMemberModal').classList.remove('show');
         showToast(`সদস্য "${name}" সফলভাবে যুক্ত হয়েছে!`, 'success'); 
-        populateMemberDropdowns(); 
-    if (typeof window.checkAndResetNewMonth === "function") {
-        window.checkAndResetNewMonth();
-    }
+        populateMemberDropdowns();
         window.refreshAll();
     });
 }
@@ -1952,9 +1903,6 @@ if (btnSubmitNot) {
         
         document.getElementById('addNoticeModal').classList.remove('show');
         showToast('নতুন নোটিশ দেওয়া হয়েছে!', 'success');
-    if (typeof window.checkAndResetNewMonth === "function") {
-        window.checkAndResetNewMonth();
-    }
         window.refreshAll();
     });
 }
@@ -1979,10 +1927,7 @@ if (btnSaveBazaar) {
         });
         
         document.getElementById('addBazaarModal').classList.remove('show');
-        showToast('বাজার সফলভাবে যোগ হয়েছে!', 'success'); 
-    if (typeof window.checkAndResetNewMonth === "function") {
-        window.checkAndResetNewMonth();
-    }
+        showToast('বাজার সফলভাবে যোগ হয়েছে!', 'success');
         window.refreshAll();
     });
 }
@@ -2027,9 +1972,6 @@ if(btnKhalaYes) btnKhalaYes.addEventListener('click', function() {
     const info = getUpcomingMealInfo();
     AppState.meals[info.day].khalaStatus[info.type] = 'yes';
     showToast('কনফার্ম করা হয়েছে: খালা এসেছে।', 'success');
-    if (typeof window.checkAndResetNewMonth === "function") {
-        window.checkAndResetNewMonth();
-    }
     window.refreshAll();
 });
 
@@ -2043,9 +1985,6 @@ if(btnKhalaNo) btnKhalaNo.addEventListener('click', function() {
             AppState.meals[info.day][info.type][m.id] = 0;
         });
         showToast('খালা আসেনি! সবার মিল ০ করে দেওয়া হয়েছে।', 'error');
-    if (typeof window.checkAndResetNewMonth === "function") {
-        window.checkAndResetNewMonth();
-    }
         window.refreshAll();
     });
 });
@@ -2055,9 +1994,6 @@ if(btnAdminResetKhala) btnAdminResetKhala.addEventListener('click', function() {
     const info = getUpcomingMealInfo();
     AppState.meals[info.day].khalaStatus[info.type] = 'pending';
     showToast('খালার স্ট্যাটাস রিসেট করা হয়েছে।', 'success');
-    if (typeof window.checkAndResetNewMonth === "function") {
-        window.checkAndResetNewMonth();
-    }
     window.refreshAll();
 });
 
@@ -2160,9 +2096,6 @@ window.setupPermanentMealSettings = function() {
             }
             
             showToast(`রুটিন আপডেট! আগামী ${convertToBanglaNumber(updatedCount)} বেলার মিল পরিবর্তন হয়েছে।`, 'success');
-    if (typeof window.checkAndResetNewMonth === "function") {
-        window.checkAndResetNewMonth();
-    }
             window.refreshAll();
             
         });
@@ -2223,9 +2156,6 @@ function initializeApp() {
     }
     
     // 5. Run initial rendering
-    if (typeof window.checkAndResetNewMonth === "function") {
-        window.checkAndResetNewMonth();
-    }
     window.refreshAll();
     
     // Fallback: Make sure Month Dropdown Year displays correctly
@@ -2250,8 +2180,5 @@ for (let d = 1; d < new Date().getDate(); d++) {
         AppState.meals[d].night[m.id] = 0; 
     }); 
 } 
-saveData(); 
-    if (typeof window.checkAndResetNewMonth === "function") {
-        window.checkAndResetNewMonth();
-    }
+saveData();
 window.refreshAll();
