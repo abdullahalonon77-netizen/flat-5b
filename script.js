@@ -778,28 +778,57 @@ function applyAdvancedGuestMeals(uid, config, isAdd) {
     const isNight = config.isNight;
     const prefs = (AppState.mealPreferences && AppState.mealPreferences[uid]) ? AppState.mealPreferences[uid] : { morning: true, night: true };
     let mealsApplied = 0;
-    const currentDay = new Date().getDate();
+    
+    const now = new Date();
+    const currentDay = now.getDate();
+    const currentHour = now.getHours();
     
     for (let day = currentDay; day <= 31; day++) {
+        if (!AppState.meals[day]) continue;
         if (duration !== null && mealsApplied >= duration) break;
-        if (isMorning && prefs.morning && !isTimePassedStrictly(day, 'morning')) {
+        
+        // সকালের মিল চেক: আজকে যদি সকালের মিল লক না হয়ে থাকে (অর্থাৎ দুপুর ১টার আগে), তবে আজকের মিলেও গেস্ট যুক্ত হবে
+        let isMorningLocked = (day === currentDay && currentHour >= 13) || AppState.meals[day].khalaStatus.morning !== 'pending';
+        
+        if (isMorning && prefs.morning && !isMorningLocked) {
             let currentMorning = parseFloat(AppState.meals[day].morning[uid]) || 0;
             if (isAdd) {
-                AppState.meals[day].morning[uid] = currentMorning + count;
+                // যদি আগে থেকে অফ (০) না থাকে, তবেই গেস্ট যোগ হবে
+                if (currentMorning > 0 || currentMorning === 0.5) {
+                    AppState.meals[day].morning[uid] = currentMorning + count;
+                } else if (currentMorning === 0 && count > 0) {
+                    // যদি নিজের মিল অফ থাকে কিন্তু গেস্ট দিতে চায়
+                    AppState.meals[day].morning[uid] = count;
+                }
             } else {
                 let newValue = currentMorning - count;
                 AppState.meals[day].morning[uid] = newValue < 0 ? 0 : newValue;
+                // যদি গেস্ট বাদ দেওয়ার পর ভ্যালু ০ হয়ে যায়, কিন্তু রেগুলার রুটিন অন থাকে, তবে ১ করে দাও
+                if (AppState.meals[day].morning[uid] === 0 && prefs.morning) {
+                    AppState.meals[day].morning[uid] = 1;
+                }
             }
             mealsApplied++;
             if (duration !== null && mealsApplied >= duration) break;
         }
-        if (isNight && prefs.night && !isTimePassedStrictly(day, 'night')) {
+        
+        // রাতের মিল চেক: আজকে যদি রাতের মিল লক না হয়ে থাকে (অর্থাৎ রাত ১০টার আগে), তবে আজকের মিলেও গেস্ট যুক্ত হবে
+        let isNightLocked = (day === currentDay && currentHour >= 22) || AppState.meals[day].khalaStatus.night !== 'pending';
+        
+        if (isNight && prefs.night && !isNightLocked) {
             let currentNight = parseFloat(AppState.meals[day].night[uid]) || 0;
             if (isAdd) {
-                AppState.meals[day].night[uid] = currentNight + count;
+                if (currentNight > 0 || currentNight === 0.5) {
+                    AppState.meals[day].night[uid] = currentNight + count;
+                } else if (currentNight === 0 && count > 0) {
+                    AppState.meals[day].night[uid] = count;
+                }
             } else {
                 let newValue = currentNight - count;
                 AppState.meals[day].night[uid] = newValue < 0 ? 0 : newValue;
+                if (AppState.meals[day].night[uid] === 0 && prefs.night) {
+                    AppState.meals[day].night[uid] = 1;
+                }
             }
             mealsApplied++;
             if (duration !== null && mealsApplied >= duration) break;
