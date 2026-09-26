@@ -1363,15 +1363,6 @@ if(saveMealBtn) {
     });
 }
 
-function getUpcomingMealInfo() {
-    const now = new Date();
-    const hour = now.getHours();
-    const day = now.getDate();
-    if (hour < 8) return { day: day, type: 'morning', label: 'আজ সকালের মিল' };
-    if (hour < 18) return { day: day, type: 'night', label: 'আজ রাতের মিল' };
-    const nextDay = day + 1 > getDaysInMonth(AppState.currentMonth, AppState.currentYear) ? 1 : day + 1;
-    return { day: nextDay, type: 'morning', label: 'আগামীকাল সকালের মিল' };
-}
 
 // লাইভ বোর্ড আপডেট লজিক
 window.updateNextMealDisplay = function() {
