@@ -79,17 +79,25 @@ let AppState = JSON.parse(JSON.stringify(defaultState));
 // Load data from Firebase
 let isInitialLoad = true;
 let isFetching = false;
-onValue(ref(db, 'flat5d_data'), (snapshot) => {
+onValue(ref(db, 'flat5b_data'), (snapshot) => {
     isFetching = true;
     const data = snapshot.val();
+    
+    // Preserve UI states
+    const currentAdminStatus = AppState.isAdmin;
+    const currentActiveUser = AppState.activeUserId;
+    
     if (data) {
         AppState = JSON.parse(JSON.stringify(defaultState));
         Object.assign(AppState, data);
-        AppState.members = data.members ? Object.values(data.members) : [];
-        AppState.bazaarRecords = data.bazaarRecords ? Object.values(data.bazaarRecords) : [];
-        AppState.notices = data.notices ? Object.values(data.notices) : [];
         
-        // Fix Meals Object Corruption if needed (already handled by defaultState merge usually, but keep if needed)
+        // CRITICAL FIX: Explicitly map object-arrays back to arrays or force them to empty arrays 
+        // to prevent Firebase from silently resurrecting default members when arrays are emptied
+        AppState.members = data.members ? Object.values(data.members).filter(Boolean) : [];
+        AppState.bazaarRecords = data.bazaarRecords ? Object.values(data.bazaarRecords).filter(Boolean) : [];
+        AppState.notices = data.notices ? Object.values(data.notices).filter(Boolean) : [];
+        
+        // Fix Meals Object Corruption if needed
         if (!AppState.meals || typeof AppState.meals !== 'object' || Object.keys(AppState.meals).length < 31) {
             AppState.meals = JSON.parse(JSON.stringify(defaultState.meals));
         }
@@ -101,10 +109,15 @@ onValue(ref(db, 'flat5d_data'), (snapshot) => {
             AppState.vacations = {};
         }
         
-        AppState.isAdmin = false;
+        // RESTORE state so the UI doesn't kick the admin out
+        AppState.isAdmin = currentAdminStatus;
+        AppState.activeUserId = currentActiveUser;
     } else {
+        // If Database is completely empty, set defaults and push to DB
         AppState = JSON.parse(JSON.stringify(defaultState));
-        set(ref(db, 'flat5d_data'), JSON.parse(JSON.stringify(defaultState)));
+        AppState.isAdmin = currentAdminStatus;
+        AppState.activeUserId = currentActiveUser;
+        set(ref(db, 'flat5b_data'), AppState);
     }
     
     if (isInitialLoad) {
@@ -126,7 +139,7 @@ onValue(ref(db, 'flat5d_data'), (snapshot) => {
 window.saveData = function() {
     if (isFetching) return;
     try {
-        set(ref(db, 'flat5d_data'), AppState);
+        set(ref(db, 'flat5b_data'), AppState);
     } catch (error) {
         console.error("Error saving data to Firebase:", error);
     }
@@ -1881,7 +1894,7 @@ const mainEnterBtn = document.getElementById('enterWebsiteBtn');
 if (mainEnterBtn) {
     mainEnterBtn.addEventListener('click', function() {
         const activeUser = AppState.members.find(m => m.id === AppState.activeUserId);
-        if (activeUser && (activeUser.name === 'Onon')) {
+        if (activeUser if (activeUser && (activeUser.name === 'Onon'))if (activeUser && (activeUser.name === 'Onon')) activeUser.name === 'Onon') {
             if (authSection) authSection.style.display = 'block'; // শুধু জুবায়ের/আবিদ হলে দেখাবে
         } else {
             if (authSection) authSection.style.display = 'none'; // অন্যদের জন্য হাইড
