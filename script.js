@@ -1216,29 +1216,6 @@ window.refreshAll = function() {
     }
 };
 
-// অ্যাপ চালু হওয়ার প্রধান ফাংশন
-function initializeApp() {
-    const dateEl = document.getElementById('displayCurrentDate');
-    if (dateEl) dateEl.innerText = getBengaliDate(new Date());
-    
-    if (typeof window.checkAndResetNewMonth === 'function') window.checkAndResetNewMonth();
-    if (typeof window.populateMonthDropdown === 'function') window.populateMonthDropdown(); 
-    if (typeof populateMemberDropdowns === 'function') populateMemberDropdowns();
-    if (typeof window.setDailyMotivation === 'function') window.setDailyMotivation(); 
-    if (typeof window.populateCalendarMonthDropdown === 'function') window.populateCalendarMonthDropdown();
-    
-    // ক্র্যাশ এড়াতে ভ্যালিডেশন
-    if (typeof window.refreshAll === 'function') {
-        window.refreshAll();
-    }
-}
-
-// মডিউল স্ক্রিপ্ট DOMContentLoaded এর জন্য অপেক্ষা না করে সরাসরি কল করতে হয়
-initializeApp();
-
-window.addEventListener('error', function(event) {
-    console.error("System Caught an Error:", event.error);
-});
 
 window.renderCalendar = function() {
     // ১. 'লোড হচ্ছে...' টেক্সট আপডেট করে বর্তমান মাস ও বছর বসানো
@@ -2131,6 +2108,7 @@ window.setupPermanentMealSettings = function() {
     newNight.addEventListener('change', (e) => applyRoutine('night', e.target.checked));
 };
 
+ // অ্যাপ চালু হওয়ার প্রধান ফাংশন
 function initializeApp() {
     const dateEl = document.getElementById('displayCurrentDate');
     if (dateEl) dateEl.innerText = getBengaliDate(new Date());
@@ -2141,10 +2119,13 @@ function initializeApp() {
     if (typeof window.setDailyMotivation === 'function') window.setDailyMotivation(); 
     if (typeof window.populateCalendarMonthDropdown === 'function') window.populateCalendarMonthDropdown();
     
-    window.refreshAll();
+    if (typeof window.refreshAll === 'function') {
+        window.refreshAll();
+    }
 }
 
-document.addEventListener('DOMContentLoaded', initializeApp);
+// Module স্ক্রিপ্ট সরাসরি কল করতে হয়
+initializeApp();
 
 window.addEventListener('error', function(event) {
     console.error("System Caught an Error:", event.error);
