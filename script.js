@@ -1159,20 +1159,21 @@ if (printBtn) {
     });
 }
 
+// সব UI একসাথে আপডেট করার মাস্টার ফাংশন (যেটা মিসিং ছিল)
 window.refreshAll = function() {
     if (typeof populateMemberDropdowns === 'function') populateMemberDropdowns();
-    if (typeof updateDashboardStats === 'function') updateDashboardStats();
-    if (typeof updateNextMealDisplay === 'function') updateNextMealDisplay();
-    if (typeof updateQuickMealToggle === 'function') updateQuickMealToggle();
+    if (typeof window.updateDashboardStats === 'function') window.updateDashboardStats();
+    if (typeof window.updateNextMealDisplay === 'function') window.updateNextMealDisplay();
+    if (typeof window.updateQuickMealToggle === 'function') window.updateQuickMealToggle();
     if (typeof window.renderCalendar === 'function') window.renderCalendar();
-    if (typeof renderBazaarList === 'function') renderBazaarList();
-    if (typeof renderGuestMealBox === 'function') renderGuestMealBox();
-    if (typeof renderVacationBox === 'function') renderVacationBox();
+    if (typeof window.renderBazaarList === 'function') window.renderBazaarList();
+    if (typeof window.renderGuestMealBox === 'function') window.renderGuestMealBox();
+    if (typeof window.renderVacationBox === 'function') window.renderVacationBox();
     if (typeof window.renderMonthlySummary === 'function') window.renderMonthlySummary();
-    if (typeof updateKhalaUI === 'function') updateKhalaUI();
-    if (typeof setupPermanentMealSettings === 'function') setupPermanentMealSettings();
-    if (typeof renderTodaysMenu === 'function') renderTodaysMenu();
-    if (typeof renderMissedMeals === 'function') renderMissedMeals();
+    if (typeof window.updateKhalaUI === 'function') window.updateKhalaUI();
+    if (typeof window.setupPermanentMealSettings === 'function') window.setupPermanentMealSettings();
+    if (typeof window.renderTodaysMenu === 'function') window.renderTodaysMenu();
+    if (typeof window.renderMissedMeals === 'function') window.renderMissedMeals();
 
     // নোটিশ বোর্ড লজিক
     const noticeContainer = document.getElementById('noticeContainer');
@@ -1182,7 +1183,7 @@ window.refreshAll = function() {
         const reversedNotices = [...AppState.notices].reverse();
         
         reversedNotices.forEach((notice, index) => {
-            let deleteBtn = AppState.isAdmin ? `<button style="background:var(--danger-light); color:var(--danger-color); border:none; border-radius:50%; width:30px; height:30px; cursor:pointer;" onclick="customConfirm('মুছে ফেলবেন?', async function() { AppState.notices = AppState.notices.filter(x => x.id !== ${notice.id}); await saveData(); refreshAll(); })">&times;</button>` : '';
+            let deleteBtn = AppState.isAdmin ? `<button style="background:var(--danger-light); color:var(--danger-color); border:none; border-radius:50%; width:30px; height:30px; cursor:pointer;" onclick="window.customConfirm('মুছে ফেলবেন?', async function() { AppState.notices = AppState.notices.filter(x => x.id !== ${notice.id}); await window.saveData(); window.refreshAll(); })">&times;</button>` : '';
             const borderStyle = index === 0 ? 'border-left: 5px solid var(--info-color);' : 'border-left: 5px solid #edf2f9;';
             
             noticeContainer.insertAdjacentHTML('beforeend', `
@@ -1197,6 +1198,30 @@ window.refreshAll = function() {
         });
     }
 };
+
+// অ্যাপ চালু হওয়ার প্রধান ফাংশন
+function initializeApp() {
+    const dateEl = document.getElementById('displayCurrentDate');
+    if (dateEl) dateEl.innerText = getBengaliDate(new Date());
+    
+    if (typeof window.checkAndResetNewMonth === 'function') window.checkAndResetNewMonth();
+    if (typeof window.populateMonthDropdown === 'function') window.populateMonthDropdown(); 
+    if (typeof populateMemberDropdowns === 'function') populateMemberDropdowns();
+    if (typeof window.setDailyMotivation === 'function') window.setDailyMotivation(); 
+    if (typeof window.populateCalendarMonthDropdown === 'function') window.populateCalendarMonthDropdown();
+    
+    // ক্র্যাশ এড়াতে ভ্যালিডেশন
+    if (typeof window.refreshAll === 'function') {
+        window.refreshAll();
+    }
+}
+
+// মডিউল স্ক্রিপ্ট DOMContentLoaded এর জন্য অপেক্ষা না করে সরাসরি কল করতে হয়
+initializeApp();
+
+window.addEventListener('error', function(event) {
+    console.error("System Caught an Error:", event.error);
+});
 
 window.renderCalendar = function() {
     // ১. 'লোড হচ্ছে...' টেক্সট আপডেট করে বর্তমান মাস ও বছর বসানো
