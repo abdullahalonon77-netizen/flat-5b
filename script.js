@@ -90,27 +90,16 @@ onValue(ref(db, 'flat5b_data'), (snapshot) => {
     if (data) {
         AppState = JSON.parse(JSON.stringify(defaultState));
         Object.assign(AppState, data);
-        
-        // CRITICAL FIX: Explicitly map object-arrays back to arrays or force them to empty arrays 
-        // to prevent Firebase from silently resurrecting default members when arrays are emptied
-        AppState.members = data.members ? Object.values(data.members).filter(Boolean) : [];
 
-        // 🔥 AUTO-RECOVERY: If Firebase has 0 members (corrupted), restore defaults
-        if (!AppState.members || AppState.members.length === 0) {
-            console.warn("Firebase returned 0 members! Restoring default members...");
-            AppState.members = JSON.parse(JSON.stringify(defaultState.members));
-            
-            // Restore meal slots for the default members to prevent undefined errors
-            for (let i = 1; i <= 31; i++) {
-                if (!AppState.meals[i]) continue;
-                AppState.members.forEach(m => {
-                    if (AppState.meals[i].morning[m.id] === undefined) AppState.meals[i].morning[m.id] = 1;
-                    if (AppState.meals[i].night[m.id] === undefined) AppState.meals[i].night[m.id] = 1;
-                });
-            }
-            // Force update the cloud database with the restored members
-            set(ref(db, 'flat5b_data'), AppState);
+        // Use the members from Firebase, IF they exist. Otherwise, keep the default ones.
+        if (data.members) {
+             AppState.members = Object.values(data.members).filter(Boolean);
+        } else {
+             // Only if someone manually wiped the members array in DB
+             AppState.members = JSON.parse(JSON.stringify(defaultState.members));
+             set(ref(db, 'flat5b_data/members'), AppState.members);
         }
+
         AppState.bazaarRecords = data.bazaarRecords ? Object.values(data.bazaarRecords).filter(Boolean) : [];
         AppState.notices = data.notices ? Object.values(data.notices).filter(Boolean) : [];
         
@@ -2191,11 +2180,3 @@ window.addEventListener('error', function(event) {
     console.error("System Caught an Error:", event.error);
 });
 
-for (let d = 1; d < new Date().getDate(); d++) { 
-    AppState.members.forEach(m => { 
-        AppState.meals[d].morning[m.id] = 0; 
-        AppState.meals[d].night[m.id] = 0; 
-    }); 
-} 
-saveData();
-window.refreshAll();
