@@ -1895,6 +1895,7 @@ if (btnSaveMem) {
         document.getElementById('addMemberModal').classList.remove('show');
         showToast(`সদস্য "${name}" সফলভাবে যুক্ত হয়েছে!`, 'success'); 
         populateMemberDropdowns();
+        saveData(); // <-- ei line ta ekhane add kore dao
         window.refreshAll();
     });
 }
