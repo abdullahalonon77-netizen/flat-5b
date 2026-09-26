@@ -1032,16 +1032,98 @@ window.refreshAll = function() {
     if (typeof renderGuestMealBox === 'function') renderGuestMealBox();
     if (typeof renderVacationBox === 'function') renderVacationBox();
     if (typeof renderMonthlySummary === 'function') renderMonthlySummary();
+    
+    // নতুন যুক্ত করা রুটিন ফাংশন
+    if (typeof setupPermanentMealSettings === 'function') setupPermanentMealSettings();
 };
 
 window.renderCalendar = function() {
+    // ১. 'লোড হচ্ছে...' টেক্সট আপডেট করে বর্তমান মাস ও বছর বসানো
+    const calMonthText = document.getElementById('currentMonthYear');
+    if (calMonthText) {
+        const monthNames = ["জানুয়ারি", "ফেব্রুয়ারি", "মার্চ", "এপ্রিল", "মে", "জুন", "জুলাই", "আগস্ট", "সেপ্টেম্বর", "অক্টোবর", "নভেম্বর", "ডিসেম্বর"];
+        calMonthText.innerText = `${monthNames[AppState.currentMonth - 1]} ${convertToBanglaNumber(AppState.currentYear)}`;
+    }
+
     const thead = document.getElementById('mealTableHead');
     const tbody = document.getElementById('mealTableBody');
     if (!thead || !tbody) return;
-    let headHtml = `<tr><th>তারিখ</th><th>বেলা</th><th>মোট</th>`;
-    AppState.members.forEach(function(m) { headHtml += `<th>${m.name}</th>`; });
+
+    let headHtml = `<tr>
+        <th>তারিখ</th>
+        <th>বেলা</th>
+        <th>মোট</th>`;
+    AppState.members.forEach(function(m) { 
+        headHtml += `<th>${m.name}</th>`; 
+    });
     headHtml += `<th>অ্যাকশন</th></tr>`;
     thead.innerHTML = headHtml;
+
+    let bodyHtml = '';
+    const daysInMonth = new Date(AppState.currentYear, AppState.currentMonth, 0).getDate();
+    const upcomingInfo = getUpcomingMealInfo();
+
+    const getMealCellHtml = (val, day, type, memberName) => {
+        let isFuture = false;
+        if (day > upcomingInfo.day) {
+            isFuture = true;
+        } else if (day === upcomingInfo.day && upcomingInfo.type === 'morning' && type === 'night') {
+            isFuture = true;
+        }
+
+        let statusClass = '';
+        let displayVal = '';
+        
+        if (val === 0) {
+            statusClass = isFuture ? 'upcoming-off' : 'off'; 
+            displayVal = '০';
+        } else if (val === 0.5) {
+            statusClass = isFuture ? 'upcoming-half' : 'half'; 
+            displayVal = '০.৫';
+        } else if (val === 1) {
+            statusClass = isFuture ? 'upcoming-on' : 'on'; 
+            displayVal = '১';
+        } else {
+            statusClass = isFuture ? 'upcoming-on' : 'on'; 
+            displayVal = convertToBanglaNumber(val); 
+        }
+        return `<td class="meal-status ${statusClass}" data-name="${memberName}"><span class="meal-val-text">${displayVal}</span></td>`;
+    };
+
+    for (let day = 1; day <= daysInMonth; day++) {
+        if (!AppState.meals[day]) continue;
+
+        const isMornLocked = isMealLocked(day, 'morning');
+        const isNightLocked = isMealLocked(day, 'night');
+
+        let mornTotal = 0; let nightTotal = 0;
+        AppState.members.forEach(function(m) {
+            mornTotal += (AppState.meals[day].morning[m.id] || 0);
+            nightTotal += (AppState.meals[day].night[m.id] || 0);
+        });
+
+        // সকালের রো (Row)
+        bodyHtml += `<tr>
+            <td rowspan="2" class="date-cell">${convertToBanglaNumber(day)}</td>
+            <td class="bela-cell">সকাল</td>
+            <td style="font-weight:800; color:var(--primary-color);">${convertToBanglaNumber(mornTotal)}</td>`;
+        AppState.members.forEach(function(m) {
+            const val = AppState.meals[day].morning[m.id] || 0;
+            bodyHtml += getMealCellHtml(val, day, 'morning', m.name);
+        });
+        bodyHtml += `<td><button class="btn-edit-meal ${isMornLocked ? 'locked' : ''}" onclick="openEditModal(${day}, 'morning')" ${isMornLocked ? 'disabled' : ''}>${isMornLocked ? 'লকড' : 'এডিট'}</button></td></tr>`;
+
+        // রাতের রো (Row)
+        bodyHtml += `<tr style="border-bottom: 3px solid #a3aed1;">
+            <td class="bela-cell">রাত</td>
+            <td style="font-weight:800; color:var(--primary-color);">${convertToBanglaNumber(nightTotal)}</td>`;
+        AppState.members.forEach(function(m) {
+            const val = AppState.meals[day].night[m.id] || 0;
+            bodyHtml += getMealCellHtml(val, day, 'night', m.name);
+        });
+        bodyHtml += `<td><button class="btn-edit-meal ${isNightLocked ? 'locked' : ''}" onclick="openEditModal(${day}, 'night')" ${isNightLocked ? 'disabled' : ''}>${isNightLocked ? 'লকড' : 'এডিট'}</button></td></tr>`;
+    }
+    tbody.innerHTML = bodyHtml;
 };
 
 window.openEditModal = function(day, type) {
@@ -1222,6 +1304,64 @@ if (btnSaveBazaar) {
 
 window.renderTodaysMenu = function() {};
 window.renderMissedMeals = function() {};
+
+window.setupPermanentMealSettings = function() {
+    const uid = AppState.activeUserId;
+    if (!uid) return;
+
+    if (!AppState.mealPreferences) {
+        AppState.mealPreferences = {};
+    }
+    
+    if (!AppState.mealPreferences[uid]) {
+        AppState.mealPreferences[uid] = { morning: true, night: true };
+    }
+
+    const prefs = AppState.mealPreferences[uid];
+    
+    const mornToggle = document.getElementById('permMorningToggle');
+    const nightToggle = document.getElementById('permNightToggle');
+    const settingsBox = document.getElementById('permanentMealSettingsBox');
+
+    if (!mornToggle || !nightToggle || !settingsBox) return;
+
+    settingsBox.style.display = 'flex';
+
+    const newMorn = mornToggle.cloneNode(true);
+    const newNight = nightToggle.cloneNode(true);
+    mornToggle.replaceWith(newMorn);
+    nightToggle.replaceWith(newNight);
+
+    newMorn.checked = prefs.morning;
+    newNight.checked = prefs.night;
+
+    const applyRoutine = (type, isEnabled) => {
+        window.customConfirm(`আপনি কি নিশ্চিত? এটি আগামী সব দিনের '${type === 'morning' ? 'সকালের' : 'রাতের'}' মিল ${isEnabled ? 'চালু (১)' : 'অফ (০)'} করে দিবে।`, async function() {
+            
+            AppState.mealPreferences[uid][type] = isEnabled;
+            const currentDay = new Date().getDate();
+            
+            let updatedCount = 0;
+            const daysInMonth = new Date(AppState.currentYear, AppState.currentMonth, 0).getDate();
+            for (let day = currentDay; day <= daysInMonth; day++) {
+                if (AppState.meals[day] && !isTimePassedStrictly(day, type)) {
+                    AppState.meals[day][type][uid] = isEnabled ? 1 : 0;
+                    updatedCount++;
+                }
+            }
+            
+            showToast(`রুটিন আপডেট! আগামী ${convertToBanglaNumber(updatedCount)} বেলার মিল পরিবর্তন হয়েছে।`, 'success');
+            await saveData();
+            window.refreshAll();
+        });
+        
+        if(type === 'morning') newMorn.checked = !isEnabled;
+        if(type === 'night') newNight.checked = !isEnabled;
+    };
+
+    newMorn.addEventListener('change', (e) => applyRoutine('morning', e.target.checked));
+    newNight.addEventListener('change', (e) => applyRoutine('night', e.target.checked));
+};
 
 function initializeApp() {
     const dateEl = document.getElementById('displayCurrentDate');
