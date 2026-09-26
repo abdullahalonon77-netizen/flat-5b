@@ -2,13 +2,13 @@ import { initializeApp as initFirebaseApp } from "https://www.gstatic.com/fireba
 import { getDatabase, ref, set, onValue } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js";
 
 const firebaseConfig = {
-  apiKey: "AIzaSyBOf2aHKyT8V1Tennc1byJ2Mt4ZED_FteU",
-  authDomain: "flat-5b.firebaseapp.com",
-  databaseURL: "https://flat-5b-default-rtdb.asia-southeast1.firebasedatabase.app",
-  projectId: "flat-5b",
-  storageBucket: "flat-5b.firebasestorage.app",
-  messagingSenderId: "999159210859",
-  appId: "1:999159210859:web:168bc656d5c873bd80622e"
+  apiKey: "AIzaSyA4uI-ranUbudtm6Cg5jgn53d4IV8ZnxCU",
+  authDomain: "flat-5b-94bfd.firebaseapp.com",
+  databaseURL: "https://flat-5b-94bfd-default-rtdb.firebaseio.com/",
+  projectId: "flat-5b-94bfd",
+  storageBucket: "flat-5b-94bfd.firebasestorage.app",
+  messagingSenderId: "672445299460",
+  appId: "1:672445299460:web:c1dcd3f26ce70302a16e51"
 };
 
 const app = initFirebaseApp(firebaseConfig);
@@ -79,7 +79,7 @@ let AppState = JSON.parse(JSON.stringify(defaultState));
 // Load data from Firebase
 let isInitialLoad = true;
 let isFetching = false;
-onValue(ref(db, 'flat5d_data'), (snapshot) => {
+onValue(ref(db, 'flat5b_data'), (snapshot) => {
     isFetching = true;
     const data = snapshot.val();
     
@@ -97,7 +97,7 @@ onValue(ref(db, 'flat5d_data'), (snapshot) => {
         } else {
              // Only if someone manually wiped the members array in DB
              AppState.members = JSON.parse(JSON.stringify(defaultState.members));
-             set(ref(db, 'flat5d_data/members'), AppState.members);
+             set(ref(db, 'flat5b_data/members'), AppState.members);
         }
 
         AppState.bazaarRecords = data.bazaarRecords ? Object.values(data.bazaarRecords).filter(Boolean) : [];
@@ -123,7 +123,7 @@ onValue(ref(db, 'flat5d_data'), (snapshot) => {
         AppState = JSON.parse(JSON.stringify(defaultState));
         AppState.isAdmin = currentAdminStatus;
         AppState.activeUserId = currentActiveUser;
-        set(ref(db, 'flat5d_data'), AppState);
+        set(ref(db, 'flat5b_data'), AppState);
     }
     
     if (isInitialLoad) {
@@ -143,11 +143,12 @@ onValue(ref(db, 'flat5d_data'), (snapshot) => {
  */
 window.saveData = function() {
     if (isFetching) return;
-    try {
-        set(ref(db, 'flat5d_data'), AppState);
-    } catch (error) {
-        console.error("Error saving data to Firebase:", error);
-    }
+    set(ref(db, 'flat5b_data'), AppState).then(() => {
+        console.log("ডাটা ফায়ারবেসে সফলভাবে সেভ হয়েছে!");
+    }).catch((error) => {
+        console.error("ফায়ারবেস এরর (হয়তো Rules লক করা):", error);
+        alert("ডাটা সেভ হয়নি! ফায়ারবেসের Rules চেক করুন।");
+    });
 }
 const saveData = window.saveData;
 
@@ -446,7 +447,7 @@ if (verifyPasswordBtn) {
         const passwordInput = document.getElementById('adminPasswordInput');
         const errorEl = document.getElementById('passwordError');
         
-        if (passwordInput && passwordInput.value === "flat5dadmin") {
+        if (passwordInput && passwordInput.value === "flat5badmin") {
             AppState.isAdmin = true;
             
             const adminModal = document.getElementById('adminLoginModal');
@@ -1413,6 +1414,9 @@ window.refreshAll = function() {
     if (typeof renderBazaarList === 'function') {
         renderBazaarList();
     }
+
+    if(typeof renderTodaysMenu === 'function') renderTodaysMenu();
+    if(typeof renderMissedMeals === 'function') renderMissedMeals();
     
     // 7. Render Guest Meal Controls
     if (typeof renderGuestMealBox === 'function') {
@@ -2128,6 +2132,127 @@ window.refreshAll = function() {
     if(typeof checkAndApplyKhalaTimeout === 'function') checkAndApplyKhalaTimeout(); // Check timeouts first
     if(typeof existingRefreshAll === 'function') existingRefreshAll(); // Then render everything
     if(typeof updateKhalaUI === 'function') updateKhalaUI(); // Update UI
+};
+
+
+// 🚀 TODAY'S MENU LOGIC 🚀
+window.renderTodaysMenu = function() {
+    const menuDisplay = document.getElementById('todaysMenuDisplay');
+    if (!menuDisplay) return;
+    const currentMenu = AppState.todaysMenu || "আজকের মেনু এখনও ঠিক করা হয়নি...";
+    menuDisplay.innerText = currentMenu;
+};
+
+const editMenuBtn = document.getElementById('editMenuBtn');
+const saveMenuBtn = document.getElementById('saveMenuBtn');
+const menuInput = document.getElementById('menuInputText');
+const menuModal = document.getElementById('editMenuModal');
+
+if (editMenuBtn && menuModal) {
+    editMenuBtn.addEventListener('click', function() {
+        menuInput.value = AppState.todaysMenu || "";
+        menuModal.classList.add('show');
+    });
+}
+
+if (saveMenuBtn && menuModal) {
+    saveMenuBtn.addEventListener('click', function() {
+        const newMenu = menuInput.value.trim();
+        if (!newMenu) return showToast('মেনু খালি রাখা যাবে না!', 'error');
+        AppState.todaysMenu = newMenu;
+        menuModal.classList.remove('show');
+        showToast('আজকের মেনু সফলভাবে আপডেট হয়েছে!', 'success');
+        window.refreshAll(); 
+    });
+}
+
+const deleteMenuBtn = document.getElementById('deleteMenuBtn');
+if (deleteMenuBtn) {
+    deleteMenuBtn.addEventListener('click', function() {
+        window.customConfirm('আপনি কি আজকের মেনু মুছে ফেলতে চান?', function() {
+            AppState.todaysMenu = ""; 
+            showToast('আজকের মেনু মুছে ফেলা হয়েছে!', 'success');
+            window.refreshAll(); 
+        });
+    });
+}
+
+// 🚀 MISSED MEAL RECOVERY SYSTEM 🚀
+window.renderMissedMeals = function() {
+    const container = document.getElementById('missedMealsContainer');
+    if(!container) return;
+    
+    if(!AppState.isAdmin) {
+        container.innerHTML = `<div style="padding:40px; text-align:center; background:#fff; border-radius:15px; width:100%; grid-column: 1 / -1;"><h3 style="color:var(--danger-color);">এই পেজটি শুধুমাত্র অ্যাডমিনদের জন্য!</h3></div>`;
+        return;
+    }
+
+    let html = '';
+    const processMeals = (mealsObj, monthLabel, monthKey) => {
+        if (!mealsObj) return;
+        const days = Object.keys(mealsObj).length;
+        
+        for(let day = 1; day <= days; day++) {
+            if(!mealsObj[day]) continue;
+            ['morning', 'night'].forEach(type => {
+                const status = mealsObj[day].khalaStatus[type];
+                const autoBackup = mealsObj[day][type + '_auto_backup'];
+                const manualBackup = mealsObj[day][type + '_backup'];
+                
+                if(status === 'no' && (autoBackup || manualBackup)) {
+                    const backupData = autoBackup || manualBackup;
+                    let totalBackupMeals = 0;
+                    
+                    AppState.members.forEach(m => {
+                        const val = backupData[m.id] || 0;
+                        totalBackupMeals += val;
+                    });
+
+                    const waktName = type === 'morning' ? 'সকাল' : 'রাত';
+                    html += `
+                    <div class="member-card" style="border-left: 6px solid var(--danger-color); display:flex; flex-direction:column;">
+                        <h4 style="color:#707eae;">${monthLabel}</h4>
+                        <h3 style="color:var(--danger-color); font-size: 20px;">${convertToBanglaNumber(day)} তারিখ - ${waktName}</h3>
+                        <p style="font-weight:800; color:var(--success-color); margin: 10px 0;">রিকভারি মিল: ${convertToBanglaNumber(totalBackupMeals)} টি</p>
+                        <div style="display: flex; gap: 10px; margin-top: auto;">
+                            <button onclick="restoreMissedMeal(${day}, '${type}', '${autoBackup ? 'auto' : 'manual'}', '${monthKey}')" style="flex:1; padding:10px; background:var(--success-color); color:#fff; border-radius:8px;">রিকভার</button>
+                            <button onclick="deleteMissedMeal(${day}, '${type}', '${autoBackup ? 'auto' : 'manual'}', '${monthKey}')" style="flex:1; padding:10px; background:var(--danger-light); color:var(--danger-color); border-radius:8px;">মুছে ফেলুন</button>
+                        </div>
+                    </div>`;
+                }
+            });
+        }
+    };
+    processMeals(AppState.meals, "চলতি মাস", "current");
+    container.innerHTML = html || `<div style="padding:40px; text-align:center; background:#fff; border-radius:15px; width:100%; grid-column: 1 / -1;"><h3 style="color:var(--text-muted);">সব ঠিক আছে! কোনো মিসড মিল নেই।</h3></div>`;
+};
+
+window.restoreMissedMeal = function(day, type, backupType, monthKey) {
+    window.customConfirm(`আপনি কি নিশ্চিত? এটি রিকভার করলে স্ট্যাটাস "খালা এসেছে" হয়ে যাবে।`, function() {
+        let targetMeals = (monthKey === 'current') ? AppState.meals : AppState.history[monthKey].meals;
+        const backupKey = type + (backupType === 'auto' ? '_auto_backup' : '_backup');
+        
+        if(targetMeals[day][backupKey]) {
+            targetMeals[day][type] = JSON.parse(JSON.stringify(targetMeals[day][backupKey]));
+            targetMeals[day].khalaStatus[type] = 'yes';
+            delete targetMeals[day][type + '_auto_backup'];
+            delete targetMeals[day][type + '_backup'];
+            showToast('সফলভাবে মিল রিকভার করা হয়েছে!', 'success');
+            window.refreshAll();
+        }
+    });
+};
+
+window.deleteMissedMeal = function(day, type, backupType, monthKey) {
+    window.customConfirm('এই রিকভারি অপশনটি মুছে ফেলতে চান?', function() {
+        let targetMeals = (monthKey === 'current') ? AppState.meals : AppState.history[monthKey].meals;
+        const backupKey = type + (backupType === 'auto' ? '_auto_backup' : '_backup');
+        if(targetMeals[day] && targetMeals[day][backupKey]) {
+            delete targetMeals[day][backupKey];
+            showToast('রিকভারি অপশনটি মুছে ফেলা হয়েছে!', 'success');
+            window.refreshAll();
+        }
+    });
 };
 
 /**
