@@ -55,6 +55,21 @@ let pendingSave = false;
 const DATABASE_PATH = 'flat5b_data';
 const databaseRef = ref(db, DATABASE_PATH);
 
+// 🔥 Onon কে সবসময় ডিফল্ট অ্যাডমিন হিসেবে সেট রাখার লজিক
+function enforceDefaultAdmin() {
+    if (!AppState.members || !Array.isArray(AppState.members)) {
+        AppState.members = [];
+    }
+    const ononExists = AppState.members.find(m => m.name === "Onon");
+    if (!ononExists) {
+        // যদি Onon ডাটাবেসে না থাকে, তবে অটোমেটিক তৈরি করে নিবে
+        AppState.members.unshift({ id: 1, name: "Onon", role: "admin_eligible", image: "images/onon.jpg" });
+    } else {
+        // Onon এর অ্যাডমিন রোল যেন সবসময় ঠিক থাকে
+        ononExists.role = "admin_eligible"; 
+    }
+}
+
 function deepClone(value) {
     if (value === undefined || value === null) return value;
     return JSON.parse(JSON.stringify(value));
@@ -160,6 +175,8 @@ onValue(databaseRef, (snapshot) => {
         AppState.guestMeals = normalizeObject(data.guestMeals);
         AppState.vacations = normalizeObject(data.vacations);
         AppState.todaysMenu = typeof data.todaysMenu === 'string' ? data.todaysMenu : '';
+
+        enforceDefaultAdmin();
 
         AppState.members = normalizeArray(data.members).length > 0 ? normalizeArray(data.members) : defaultState.members;
         AppState.bazaarRecords = normalizeArray(data.bazaarRecords);
