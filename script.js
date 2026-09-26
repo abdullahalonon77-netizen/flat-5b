@@ -1174,17 +1174,191 @@ window.updateNextMealDisplay = function() {
     const info = getUpcomingMealInfo();
     const labelEl = document.getElementById('nextMealLabel');
     const countEl = document.getElementById('nextMealCount');
-    if(labelEl) labelEl.innerText = info.label;
-    let total = 0;
-    if(AppState.meals[info.day]) {
-        AppState.members.forEach(function(m) {
-            total += (AppState.meals[info.day][info.type][m.id] || 0);
-        });
+    const boardTitle = document.getElementById('currentMealBoardTitle');
+    const boardList = document.getElementById('currentMealBoardList');
+    
+    // Safety Fallback: Jodi data na thake tahole auto toiri kore nibe
+    if (!AppState.meals[info.day]) {
+        AppState.meals[info.day] = { morning: {}, night: {}, khalaStatus: { morning: 'pending', night: 'pending' } };
     }
+    
+    const currentStatus = AppState.meals[info.day].khalaStatus[info.type] || 'pending';
+    if (labelEl) {
+        labelEl.innerText = currentStatus !== 'pending' ? `${info.label} (লকড)` : info.label;
+    }
+    
+    if(boardTitle) boardTitle.innerText = `${info.label} - লাইভ অবস্থা`;
+    
+    let total = 0;
+    let boardHtml = '';
+    
+    AppState.members.forEach(function(m) {
+        const val = parseFloat(AppState.meals[info.day][info.type][m.id]) || 0;
+        total += val;
+        
+        let statusClass = '';
+        let displayVal = '';
+        
+        if (val === 0) {
+            statusClass = 'off';
+            displayVal = 'অফ (০)';
+        } else if (val === 0.5) {
+            statusClass = 'half';
+            displayVal = 'হাফ (০.৫)';
+        } else if (val === 1) {
+            statusClass = 'on';
+            displayVal = 'ফুল (১)';
+        } else {
+            statusClass = 'on';
+            displayVal = `মোট (${convertToBanglaNumber(val)})`; 
+        }
+        
+        boardHtml += `<div class="live-meal-item-small ${statusClass}">
+            <span style="font-size:14px; margin-bottom:4px;">${m.name}</span>
+            <span style="font-size:12px;">${displayVal}</span>
+        </div>`;
+    });
+    
     if(countEl) countEl.innerText = convertToBanglaNumber(total);
+    if(boardList) boardList.innerHTML = boardHtml;
 };
 
-window.updateQuickMealToggle = function() {};
+window.updateQuickMealToggle = function() {
+    const info = getUpcomingMealInfo();
+    const toggleBoxOuter = document.querySelector('.quick-toggle-box-large');
+    const toggleLabel = document.getElementById('quickMealLabel');
+    
+    // Safety Fallback
+    if (!AppState.meals[info.day]) {
+        AppState.meals[info.day] = { morning: {}, night: {}, khalaStatus: { morning: 'pending', night: 'pending' } };
+    }
+
+    const currentStatus = AppState.meals[info.day].khalaStatus[info.type] || 'pending';
+    
+    if (currentStatus !== 'pending') {
+        if(toggleBoxOuter) toggleBoxOuter.classList.add('locked-section');
+        if(toggleLabel) toggleLabel.innerText = `${info.label} (লক হয়ে গেছে)`;
+    } else {
+        if(toggleBoxOuter) toggleBoxOuter.classList.remove('locked-section');
+        if(toggleLabel) toggleLabel.innerText = `${info.label} আপডেট করুন`;
+    }
+    
+    const uid = AppState.activeUserId;
+    const mainToggleWrapper = document.querySelector('.main-toggle-wrapper');
+    const halfContainer = document.getElementById('halfMealOptionContainer');
+    const statusTxt = document.getElementById('quickMealStatusTxt');
+
+    // User Login na thakle jeno error na dey
+    if(!uid) {
+        if(mainToggleWrapper) mainToggleWrapper.style.display = 'none';
+        if(halfContainer) halfContainer.style.display = 'none';
+        if(statusTxt) statusTxt.innerHTML = `<span style="color:var(--danger-color); font-size:16px;">দয়া করে ড্যাশবোর্ড থেকে নিজের নাম সিলেক্ট করুন!</span>`;
+        return;
+    } else {
+        if(mainToggleWrapper) mainToggleWrapper.style.display = 'flex';
+    }
+    
+    const toggle = document.getElementById('quickMealMainToggle');
+    const warningBox = document.getElementById('routineWarningBox');
+    
+    const prefs = (AppState.mealPreferences && AppState.mealPreferences[uid]) ? AppState.mealPreferences[uid] : { morning: true, night: true };
+    const isRoutineOn = info.type === 'morning' ? prefs.morning : prefs.night;
+    
+    if (warningBox) {
+        let warnings = [];
+        if (!prefs.morning) warnings.push('সকাল');
+        if (!prefs.night) warnings.push('রাত');
+
+        if (warnings.length > 0) {
+            warningBox.style.display = 'block';
+            warningBox.innerHTML = `⚠️ আপনার নিয়মিত রুটিনে <b>${warnings.join(' ও ')}</b> এর মিল স্থায়ীভাবে অফ করা আছে।<br><span style="font-size:12px; color:#555;">গেস্ট মিল দিলে তা এই বেলায় অ্যাড হবে না। (আজকের জন্য চাইলে নিচে ম্যানুয়ালি অন করতে পারেন)</span>`;
+        } else {
+            warningBox.style.display = 'none';
+        }
+    }
+    
+    let currentVal = parseFloat(AppState.meals[info.day][info.type][uid]) || 0;
+    
+    let activeGuestCount = 0;
+    const guestConfig = AppState.guestMeals[uid];
+    if (guestConfig && isRoutineOn) {
+        if ((info.type === 'morning' && guestConfig.isMorning) || (info.type === 'night' && guestConfig.isNight)) {
+            activeGuestCount = parseInt(guestConfig.count) || 0;
+        }
+    }
+    
+    let baseMeal = currentVal - activeGuestCount;
+    if (baseMeal < 0) baseMeal = 0;
+    if (baseMeal > 1) baseMeal = 1;
+
+    const newToggle = toggle.cloneNode(true);
+    toggle.replaceWith(newToggle);
+    
+    newToggle.checked = baseMeal > 0;
+    if(halfContainer) halfContainer.style.display = baseMeal > 0 ? 'block' : 'none';
+    
+    if(baseMeal === 1) statusTxt.innerText = "আপনার নিজের মিল ফুল (১) সেট করা আছে।";
+    else if(baseMeal === 0.5) statusTxt.innerText = "আপনার নিজের মিল হাফ (০.৫) সেট করা আছে।";
+    else statusTxt.innerText = "আপনার নিজের মিল অফ (০) করা আছে।";
+
+    if(activeGuestCount > 0) {
+        statusTxt.innerHTML += `<br><span style="color:var(--success-color); font-size:15px; display:block; margin-top:5px; font-weight:800;">+ সাথে ${convertToBanglaNumber(activeGuestCount)} টি গেস্ট মিল যোগ করা আছে</span>`;
+    }
+    
+    newToggle.addEventListener('change', function() {
+        if(!this.checked) {
+            if(halfContainer) halfContainer.style.display = 'none';
+            AppState.meals[info.day][info.type][uid] = 0 + activeGuestCount;
+            showToast('আপনার নিজের মিল অফ করা হয়েছে!', 'success');
+            refreshAll();
+        } else {
+            if (!isRoutineOn) {
+                const waktName = info.type === 'morning' ? 'সকালের' : 'রাতের';
+                window.customConfirm(`আপনার নিয়মিত রুটিনে ${waktName} মিল বন্ধ আছে।\n\nআপনি কি শুধুমাত্র আজকের জন্য মিলটি চালু করতে চান?`, function() {
+                    AppState.meals[info.day][info.type][uid] = 1 + activeGuestCount;
+                    showToast(`শুধুমাত্র আজকের ${waktName} মিল চালু করা হয়েছে!`, 'success');
+                    refreshAll();
+                });
+                newToggle.checked = false; 
+            } else {
+                if(halfContainer) halfContainer.style.display = 'block';
+                AppState.meals[info.day][info.type][uid] = 1 + activeGuestCount;
+                showToast('আপনার নিজের মিল চালু করা হয়েছে!', 'success');
+                refreshAll();
+            }
+        }
+    });
+    
+    const btnFull = document.getElementById('quickMealFullBtn');
+    const btnHalf = document.getElementById('quickMealHalfBtn');
+    
+    if(btnFull && btnHalf) {
+        const newBtnFull = btnFull.cloneNode(true);
+        const newBtnHalf = btnHalf.cloneNode(true);
+        btnFull.replaceWith(newBtnFull);
+        btnHalf.replaceWith(newBtnHalf);
+        
+        if(baseMeal === 1) {
+            newBtnFull.style.borderColor = 'var(--success-color)';
+            newBtnHalf.style.borderColor = 'transparent';
+        } else if (baseMeal === 0.5) {
+            newBtnHalf.style.borderColor = 'var(--warning-color)';
+            newBtnFull.style.borderColor = 'transparent';
+        }
+        
+        newBtnFull.addEventListener('click', function() {
+            AppState.meals[info.day][info.type][uid] = 1 + activeGuestCount;
+            showToast('নিজের মিল ফুল (১) করা হয়েছে!', 'success');
+            refreshAll();
+        });
+        
+        newBtnHalf.addEventListener('click', function() {
+            AppState.meals[info.day][info.type][uid] = 0.5 + activeGuestCount;
+            showToast('নিজের মিল হাফ (০.৫) করা হয়েছে!', 'success');
+            refreshAll();
+        });
+    }
+};
 
 window.renderBazaarList = function() {
     const tbody = document.getElementById('bazaarTableBody');
@@ -1199,6 +1373,37 @@ window.renderBazaarList = function() {
         tbody.insertAdjacentHTML('beforeend', `<tr><td>${record.date}</td><td>${memName}</td><td>${record.details}</td><td>${formatCurrency(record.amount)}</td><td></td></tr>`);
     });
     totalEl.innerText = formatCurrency(total);
+};
+
+window.populateCalendarMonthDropdown = function() {
+    const selectEl = document.getElementById('calendarMonthSelect');
+    if (!selectEl) return;
+    selectEl.innerHTML = '';
+    
+    const monthNames = ["জানুয়ারি", "ফেব্রুয়ারি", "মার্চ", "এপ্রিল", "মে", "জুন", "জুলাই", "আগস্ট", "সেপ্টেম্বর", "অক্টোবর", "নভেম্বর", "ডিসেম্বর"];
+    const currentM = AppState.currentMonth; 
+    const currentY = AppState.currentYear;
+    
+    for (let m = 1; m <= 12; m++) {
+        const historyKey = `${currentY}-${String(m).padStart(2, '0')}`;
+        let optionLabel = `${monthNames[m - 1]} ${convertToBanglaNumber(currentY)}`;
+        let optionValue = historyKey;
+        
+        if (m === currentM) {
+            optionLabel += " (চলতি মাস)";
+            optionValue = "current";
+        } else if (m > currentM) {
+            optionLabel += " (আগামী মাস)";
+        }
+        
+        const isSelected = (m === currentM) ? "selected" : "";
+        const html = `<option value="${optionValue}" ${isSelected}>${optionLabel}</option>`;
+        
+        selectEl.insertAdjacentHTML('beforeend', html);
+    }
+    
+    selectEl.removeEventListener('change', renderCalendar);
+    selectEl.addEventListener('change', renderCalendar);
 };
 
 window.removeMember = function(id) {
