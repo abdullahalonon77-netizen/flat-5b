@@ -118,6 +118,10 @@ function ensureMealDaysForMembers() {
         AppState.meals = {};
     }
 
+    const now = new Date();
+    const currentDay = now.getDate();
+    const currentHour = now.getHours();
+
     for (let day = 1; day <= 31; day++) {
         if (!AppState.meals[day] || typeof AppState.meals[day] !== 'object') {
             AppState.meals[day] = {
@@ -129,6 +133,39 @@ function ensureMealDaysForMembers() {
         if (!AppState.meals[day].morning) AppState.meals[day].morning = {};
         if (!AppState.meals[day].night) AppState.meals[day].night = {};
         if (!AppState.meals[day].khalaStatus) AppState.meals[day].khalaStatus = { morning: 'pending', night: 'pending' };
+
+        // 🔥 Asol Logic: Firebase e data na thakle past date e 0 ebong future date e 1 set korbe
+        AppState.members.forEach(function(member) {
+            const uid = member.id;
+
+            // Sokal er meal check
+            if (AppState.meals[day].morning[uid] === undefined) {
+                // Jodi din ti otit hoy ba ajker dupur 1 ta par hoye jay, tobe 0
+                if (day < currentDay || (day === currentDay && currentHour >= 13)) {
+                    AppState.meals[day].morning[uid] = 0; 
+                } else {
+                    // Future hole 1 (Tobe chuti ba routine off thakle 0 hobe)
+                    let isMornOn = 1;
+                    if (AppState.vacations && AppState.vacations[uid]) isMornOn = 0;
+                    else if (AppState.mealPreferences && AppState.mealPreferences[uid] && AppState.mealPreferences[uid].morning === false) isMornOn = 0;
+                    AppState.meals[day].morning[uid] = isMornOn;
+                }
+            }
+
+            // Rater meal check
+            if (AppState.meals[day].night[uid] === undefined) {
+                // Jodi din ti otit hoy ba ajker rat 10 ta par hoye jay, tobe 0
+                if (day < currentDay || (day === currentDay && currentHour >= 22)) {
+                    AppState.meals[day].night[uid] = 0; 
+                } else {
+                    // Future hole 1 (Tobe chuti ba routine off thakle 0 hobe)
+                    let isNightOn = 1;
+                    if (AppState.vacations && AppState.vacations[uid]) isNightOn = 0;
+                    else if (AppState.mealPreferences && AppState.mealPreferences[uid] && AppState.mealPreferences[uid].night === false) isNightOn = 0;
+                    AppState.meals[day].night[uid] = isNightOn;
+                }
+            }
+        });
     }
 }
 
@@ -526,13 +563,26 @@ function isTimePassedStrictly(day, type) {
     const realMonth = now.getMonth() + 1;
     const realYear = now.getFullYear();
 
+    // আগের বছর বা আগের মাস হলে পুরোপুরি লকড (Time passed)
     if (AppState.currentYear < realYear || (AppState.currentYear === realYear && AppState.currentMonth < realMonth)) {
         return true;
     }
 
+    // আগের দিন হলে পুরোপুরি লকড
     if (day < realDay) return true;
+    
+    // আজকের দিন হলে সময়ের হিসেবে চেক করা
+    if (day === realDay) {
+        const hour = now.getHours();
+        if (type === 'morning' && hour >= 13) return true; // দুপুর ১টার পর সকালের মিল লক
+        if (type === 'night' && hour >= 22) return true;   // রাত ১০টার পর রাতের মিল লক
+           
+        // সময় না পেরোলে, শুধু তখনই লক হবে যদি খালা কনফার্ম হয়ে যায়
+        return AppState.meals[day].khalaStatus[type] !== 'pending';
+    }
 
-    return AppState.meals[day].khalaStatus[type] !== 'pending';
+    // ফিউচারের দিন (আগামীকাল বা তার পর) হলে কখনোই লক হবে না (অর্থাৎ False)
+    return false; 
 }
 
 function isMealLocked(day, type) {
