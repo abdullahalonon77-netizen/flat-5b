@@ -51,7 +51,7 @@ let isFetching = false;
 let firebaseReady = false;
 let pendingSave = false;
 
-// 1. Consistent Database Node Reference
+// Flat 5B er Database Path
 const DATABASE_PATH = 'flat5b_data';
 const databaseRef = ref(db, DATABASE_PATH);
 
@@ -325,13 +325,24 @@ if (enterBtn) {
         }
         AppState.activeUserId = parseInt(selectedId);
         const activeUser = AppState.members.find(m => m.id === AppState.activeUserId);
-        if (activeUser && activeUser.name === 'Onon') {
+        
+        if (activeUser) {
             const greetingEl = document.getElementById('greetingText');
             if (greetingEl) {
                 greetingEl.innerText = "Welcome, " + activeUser.name + "!";
             }
             AppState.isAdmin = false;
+            
             const adminBtn = document.getElementById('adminLoginBtn');
+            const authSection = document.querySelector('.admin-auth-section');
+            
+            // 🔥 শুধুমাত্র Onon কে অ্যাডমিন বাটন দেখানো হবে
+            if (activeUser.name === 'Onon') {
+                if (authSection) authSection.style.display = 'block';
+            } else {
+                if (authSection) authSection.style.display = 'none';
+            }
+
             if (adminBtn) {
                 adminBtn.innerHTML = `
                     <svg xmlns="http://www.w3.org/2000/svg" class="icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="width:20px; height:20px;">
@@ -343,6 +354,7 @@ if (enterBtn) {
                 btn.style.display = 'none';
             });
         }
+        
         const loginModal = document.getElementById('userLoginModal');
         if (loginModal) {
             loginModal.classList.remove('show');
@@ -387,6 +399,8 @@ if (verifyPasswordBtn) {
     verifyPasswordBtn.addEventListener('click', function() {
         const passwordInput = document.getElementById('adminPasswordInput');
         const errorEl = document.getElementById('passwordError');
+        
+        // 🔥 Flat 5B er Password Check
         if (passwordInput && passwordInput.value === "flat5badmin") {
             AppState.isAdmin = true;
             const adminModal = document.getElementById('adminLoginModal');
