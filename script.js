@@ -88,22 +88,20 @@ onValue(ref(db, 'flat5b_data'), (snapshot) => {
     const currentActiveUser = AppState.activeUserId;
     
     if (data) {
-        AppState = JSON.parse(JSON.stringify(defaultState));
-        Object.assign(AppState, data);
-
-        // Use the members from Firebase, IF they exist. Otherwise, keep the default ones.
+        // 🔥 ফিক্স: ডিফল্ট স্টেট দিয়ে পুরোটা ওভাররাইট না করে, ফায়ারবেসের ডেটাকে সরাসরি অ্যাসাইন করো
+        AppState = data;
+        
+        // সেফটি চেক: মেম্বার যেন কোনোভাবেই হারিয়ে না যায়
         if (data.members) {
              AppState.members = Object.values(data.members).filter(Boolean);
         } else {
-             // Only if someone manually wiped the members array in DB
              AppState.members = JSON.parse(JSON.stringify(defaultState.members));
-             set(ref(db, 'flat5b_data/members'), AppState.members);
         }
 
         AppState.bazaarRecords = data.bazaarRecords ? Object.values(data.bazaarRecords).filter(Boolean) : [];
         AppState.notices = data.notices ? Object.values(data.notices).filter(Boolean) : [];
         
-        // Fix Meals Object Corruption if needed
+        // বাকি ডেটা ঠিকঠাক রাখা
         if (!AppState.meals || typeof AppState.meals !== 'object' || Object.keys(AppState.meals).length < 31) {
             AppState.meals = JSON.parse(JSON.stringify(defaultState.meals));
         }
@@ -115,10 +113,9 @@ onValue(ref(db, 'flat5b_data'), (snapshot) => {
             AppState.vacations = {};
         }
         
-        // RESTORE state so the UI doesn't kick the admin out
         AppState.isAdmin = currentAdminStatus;
         AppState.activeUserId = currentActiveUser;
-    } else {
+    }else {
         // If Database is completely empty, set defaults and push to DB
         AppState = JSON.parse(JSON.stringify(defaultState));
         AppState.isAdmin = currentAdminStatus;
