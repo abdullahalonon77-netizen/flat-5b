@@ -50,8 +50,8 @@ let isInitialLoad = true;
 let isFetching = false;
 let firebaseReady = false;
 let pendingSave = false;
-let saveQueue = Promise.resolve();
 
+// 1. Consistent Database Node Reference
 const DATABASE_PATH = 'flat5b_data';
 const databaseRef = ref(db, DATABASE_PATH);
 
@@ -60,51 +60,40 @@ function deepClone(value) {
     return JSON.parse(JSON.stringify(value));
 }
 
-function normalizeArray(value, fallback = []) {
+// 2. Safe Firebase Data Synchronization
+function normalizeArray(value) {
+    if (value === undefined || value === null) return [];
     if (Array.isArray(value)) {
         return value.filter(Boolean);
     }
-
-    if (value && typeof value === 'object') {
+    if (typeof value === 'object') {
         return Object.values(value).filter(Boolean);
     }
-
-    return Array.isArray(fallback) ? deepClone(fallback) : [];
+    return [];
 }
 
-function normalizeObject(value, fallback = {}) {
+function normalizeObject(value) {
     if (value && typeof value === 'object' && !Array.isArray(value)) {
         return value;
     }
-
-    return fallback && typeof fallback === 'object' && !Array.isArray(fallback)
-        ? deepClone(fallback)
-        : {};
+    return {};
 }
 
-function normalizeMeals(value, fallback = {}) {
-    const source = value && typeof value === 'object' && !Array.isArray(value)
-        ? value
-        : fallback;
-
-    if (!source || typeof source !== 'object' || Array.isArray(source)) {
-        return {};
-    }
-
+function normalizeMeals(value) {
+    const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
     const normalized = {};
 
-    Object.entries(source).forEach(([day, meal]) => {
-        if (!meal || typeof meal !== 'object' || Array.isArray(meal)) return;
-
+    for (let day = 1; day <= 31; day++) {
+        const meal = source[day] || {};
         normalized[day] = {
-            morning: normalizeObject(meal.morning, {}),
-            night: normalizeObject(meal.night, {}),
+            morning: normalizeObject(meal.morning),
+            night: normalizeObject(meal.night),
             khalaStatus: {
                 morning: meal.khalaStatus?.morning || 'pending',
                 night: meal.khalaStatus?.night || 'pending'
             }
         };
-    });
+    }
 
     return normalized;
 }
@@ -122,59 +111,37 @@ function ensureMealDaysForMembers() {
                 khalaStatus: { morning: 'pending', night: 'pending' }
             };
         }
-
-        if (!AppState.meals[day].morning || typeof AppState.meals[day].morning !== 'object') {
-            AppState.meals[day].morning = {};
-        }
-
-        if (!AppState.meals[day].night || typeof AppState.meals[day].night !== 'object') {
-            AppState.meals[day].night = {};
-        }
-
-        if (!AppState.meals[day].khalaStatus || typeof AppState.meals[day].khalaStatus !== 'object') {
-            AppState.meals[day].khalaStatus = { morning: 'pending', night: 'pending' };
-        }
-
-        AppState.meals[day].khalaStatus.morning =
-            AppState.meals[day].khalaStatus.morning || 'pending';
-        AppState.meals[day].khalaStatus.night =
-            AppState.meals[day].khalaStatus.night || 'pending';
+        if (!AppState.meals[day].morning) AppState.meals[day].morning = {};
+        if (!AppState.meals[day].night) AppState.meals[day].night = {};
+        if (!AppState.meals[day].khalaStatus) AppState.meals[day].khalaStatus = { morning: 'pending', night: 'pending' };
     }
 }
 
 function buildPersistedState() {
     const state = deepClone(AppState);
-
-    // UI-only/session-only values must not overwrite shared Firebase data.
     state.isAdmin = false;
     state.activeUserId = null;
-
     return state;
 }
 
-window.saveData = function() {
+// 3. Immediate Persistence Fix
+window.saveData = async function() {
     if (!firebaseReady) {
         pendingSave = true;
-        return Promise.resolve(false);
+        return false;
     }
 
     const payload = buildPersistedState();
 
-    // Serialize full-state writes so rapid consecutive updates cannot race each other.
-    saveQueue = saveQueue
-        .catch(() => undefined)
-        .then(() => set(databaseRef, payload))
-        .then(() => {
-            console.log("ডাটা ফায়ারবেসে সফলভাবে সেভ হয়েছে!");
-            return true;
-        })
-        .catch((error) => {
-            console.error("ফায়ারবেস এরর:", error);
-            showToast('ডাটা সেভ করা যায়নি। আবার চেষ্টা করুন।', 'error');
-            return false;
-        });
-
-    return saveQueue;
+    try {
+        await set(databaseRef, payload);
+        console.log("ডাটা ফায়ারবেসে সফলভাবে সেভ হয়েছে!");
+        return true;
+    } catch (error) {
+        console.error("ফায়ারবেস এরর:", error);
+        showToast('ডাটা সেভ করা যায়নি। আবার চেষ্টা করুন।', 'error');
+        return false;
+    }
 };
 
 const saveData = window.saveData;
@@ -187,8 +154,6 @@ onValue(databaseRef, (snapshot) => {
     const currentActiveUser = AppState.activeUserId;
 
     if (data && typeof data === 'object') {
-        // Merge remote data into the existing state. Never fall back to defaults merely
-        // because one remote property is temporarily absent.
         AppState.currentMonth = Number.isFinite(Number(data.currentMonth))
             ? Number(data.currentMonth)
             : AppState.currentMonth || defaultState.currentMonth;
@@ -197,26 +162,21 @@ onValue(databaseRef, (snapshot) => {
             ? Number(data.currentYear)
             : AppState.currentYear || defaultState.currentYear;
 
-        AppState.guestMeals = normalizeObject(data.guestMeals, AppState.guestMeals);
-        AppState.vacations = normalizeObject(data.vacations, AppState.vacations);
+        AppState.guestMeals = normalizeObject(data.guestMeals);
+        AppState.vacations = normalizeObject(data.vacations);
         AppState.todaysMenu = typeof data.todaysMenu === 'string'
             ? data.todaysMenu
             : (AppState.todaysMenu || '');
 
-        // Firebase stores JS arrays as objects with numeric keys. Convert them back safely.
-        AppState.members = normalizeArray(data.members, AppState.members);
-        AppState.bazaarRecords = normalizeArray(data.bazaarRecords, AppState.bazaarRecords);
-        AppState.notices = normalizeArray(data.notices, AppState.notices);
+        AppState.members = normalizeArray(data.members);
+        AppState.bazaarRecords = normalizeArray(data.bazaarRecords);
+        AppState.notices = normalizeArray(data.notices);
+        AppState.meals = normalizeMeals(data.meals);
+        AppState.history = normalizeObject(data.history);
 
-        // Meals are keyed by day, so keep them as an object while normalizing each day.
-        AppState.meals = normalizeMeals(data.meals, AppState.meals);
-        AppState.history = normalizeObject(data.history, AppState.history);
-
-        // Preserve local/session-only UI state.
         AppState.isAdmin = currentAdminStatus;
         AppState.activeUserId = currentActiveUser;
     } else {
-        // A genuinely empty database gets initialized once with the application defaults.
         AppState = deepClone(defaultState);
         AppState.isAdmin = currentAdminStatus;
         AppState.activeUserId = currentActiveUser;
@@ -231,8 +191,6 @@ onValue(databaseRef, (snapshot) => {
         isInitialLoad = false;
 
         if (!data) {
-            // Only initialize an empty Firebase node. Never write defaults before the
-            // first remote snapshot arrives.
             saveData();
         } else if (pendingSave) {
             pendingSave = false;
@@ -765,7 +723,7 @@ window.renderGuestMealBox = function() {
 
 const startGuestBtn = document.getElementById('startGuestMealBtn');
 if (startGuestBtn) {
-    startGuestBtn.addEventListener('click', function() {
+    startGuestBtn.addEventListener('click', async function() {
         const countInput = document.getElementById('guestMealCountInput').value;
         const count = parseInt(countInput);
         const durationVal = document.getElementById('guestMealDurationInput').value;
@@ -782,7 +740,7 @@ if (startGuestBtn) {
         const config = { count: count, duration: duration, isMorning: isMorning, isNight: isNight };
         AppState.guestMeals[AppState.activeUserId] = config; 
         applyAdvancedGuestMeals(AppState.activeUserId, config, true);
-        saveData();
+        await saveData();
         showToast('গেস্ট মিল চালু হয়েছে!', 'success'); 
         if (typeof window.refreshAll === 'function') {
             window.refreshAll();
@@ -792,12 +750,12 @@ if (startGuestBtn) {
 
 const stopGuestBtn = document.getElementById('stopGuestMealBtn');
 if (stopGuestBtn) {
-    stopGuestBtn.addEventListener('click', function() {
+    stopGuestBtn.addEventListener('click', async function() {
         const config = AppState.guestMeals[AppState.activeUserId];
         if (config) { 
             applyAdvancedGuestMeals(AppState.activeUserId, config, false); 
             delete AppState.guestMeals[AppState.activeUserId]; 
-            saveData();
+            await saveData();
             showToast('গেস্ট মিল অফ করা হয়েছে!', 'success'); 
             if (typeof window.refreshAll === 'function') {
                 window.refreshAll();
@@ -836,10 +794,10 @@ window.renderVacationBox = function() {
 const startVacBtn = document.getElementById('startVacationBtn');
 if (startVacBtn) {
     startVacBtn.addEventListener('click', function() {
-        window.customConfirm("ভবিষ্যতের সব আনলকড মিল ০ হয়ে যাবে। আপনি কি নিশ্চিত?", function() {
+        window.customConfirm("ভবিষ্যতের সব আনলকড মিল ০ হয়ে যাবে। আপনি কি নিশ্চিত?", async function() {
             AppState.vacations[AppState.activeUserId] = true; 
             applyVacation(AppState.activeUserId, true);
-            saveData();
+            await saveData();
             showToast('ছুটি চালু! সামনের সব মিল অফ করা হয়েছে।', 'success'); 
             if (typeof window.refreshAll === 'function') {
                 window.refreshAll();
@@ -851,10 +809,10 @@ if (startVacBtn) {
 const stopVacBtn = document.getElementById('stopVacationBtn');
 if (stopVacBtn) {
     stopVacBtn.addEventListener('click', function() {
-        window.customConfirm("ছুটি শেষ? আগামী সব আনলকড মিল আবার চালু (১) হয়ে যাবে। নিশ্চিত?", function() {
+        window.customConfirm("ছুটি শেষ? আগামী সব আনলকড মিল আবার চালু (১) হয়ে যাবে। নিশ্চিত?", async function() {
             delete AppState.vacations[AppState.activeUserId]; 
             applyVacation(AppState.activeUserId, false);
-            saveData();
+            await saveData();
             showToast('ছুটি শেষ! রেগুলার মিল চালু হয়েছে।', 'success'); 
             if (typeof window.refreshAll === 'function') {
                 window.refreshAll();
@@ -867,7 +825,7 @@ function getDaysInMonth(month, year) {
     return new Date(year, month, 0).getDate();
 }
 
-window.checkAndResetNewMonth = function() {
+window.checkAndResetNewMonth = async function() {
     if (!AppState.history) {
         AppState.history = {};
     }
@@ -899,7 +857,7 @@ window.checkAndResetNewMonth = function() {
                 AppState.meals[i].night[member.id] = 1; 
             });
         }
-        saveData();
+        await saveData();
         showToast("নতুন মাস শুরু হয়েছে! আগের হিসাব সেভ করে ক্যালেন্ডার আপডেট করা হলো।", "success");
     }
 };
@@ -1103,7 +1061,7 @@ window.openEditModal = function(day, type) {
 
 const saveMealBtn = document.getElementById('saveMealBtn');
 if(saveMealBtn) {
-    saveMealBtn.addEventListener('click', function() {
+    saveMealBtn.addEventListener('click', async function() {
         const form = document.getElementById('editMealForm');
         const day = parseInt(form.dataset.editDay);
         const type = form.dataset.editType;
@@ -1115,7 +1073,7 @@ if(saveMealBtn) {
         });
         document.getElementById('editMealModal').classList.remove('show');
         showToast('মিল আপডেট হয়েছে!', 'success');
-        saveData();
+        await saveData();
         window.refreshAll();
     });
 }
@@ -1162,7 +1120,7 @@ window.renderBazaarList = function() {
 };
 
 window.removeMember = function(id) {
-    window.customConfirm('সতর্কতা: এই সদস্যকে মুছে ফেলতে চাইলে "delete" লিখুন।', function() {
+    window.customConfirm('সতর্কতা: এই সদস্যকে মুছে ফেলতে চাইলে "delete" লিখুন।', async function() {
         AppState.members = AppState.members.filter(m => m.id !== id);
         Object.values(AppState.meals || {}).forEach(function(dayData) {
             if (dayData?.morning) delete dayData.morning[id];
@@ -1172,7 +1130,7 @@ window.removeMember = function(id) {
             AppState.activeUserId = null;
         }
         showToast('সদস্য মুছে ফেলা হয়েছে', 'success');
-        saveData();
+        await saveData();
         window.refreshAll();
     }, 'delete');
 };
@@ -1194,7 +1152,7 @@ if (mainEnterBtn) {
 
 const btnSaveMem = document.getElementById('saveMemberBtn');
 if (btnSaveMem) {
-    btnSaveMem.addEventListener('click', function(e) {
+    btnSaveMem.addEventListener('click', async function(e) {
         e.preventDefault();
         const nameInput = document.getElementById('newMemberName');
         const name = nameInput ? nameInput.value.trim() : '';
@@ -1210,6 +1168,9 @@ if (btnSaveMem) {
         
         ensureMealDaysForMembers();
         for (let day = 1; day <= 31; day++) {
+            if (!AppState.meals[day]) {
+                AppState.meals[day] = { morning: {}, night: {}, khalaStatus: { morning: 'pending', night: 'pending' } };
+            }
             AppState.meals[day].morning[newId] = 1;
             AppState.meals[day].night[newId] = 1;
         }
@@ -1217,14 +1178,14 @@ if (btnSaveMem) {
         document.getElementById('addMemberModal').classList.remove('show');
         showToast(`সদস্য "${name}" সফলভাবে যুক্ত হয়েছে!`, 'success'); 
         populateMemberDropdowns();
-        saveData(); // <--- অত্যন্ত জরুরি: ফায়ারবেসে সেভ করার কমান্ড
+        await saveData();
         window.refreshAll();
     });
 }
 
 const btnSubmitNot = document.getElementById('submitNoticeBtn');
 if (btnSubmitNot) {
-    btnSubmitNot.addEventListener('click', function(e) {
+    btnSubmitNot.addEventListener('click', async function(e) {
         e.preventDefault();
         const author = document.getElementById('noticeAuthorName').value.trim();
         const content = document.getElementById('noticeContent').value.trim();
@@ -1232,14 +1193,14 @@ if (btnSubmitNot) {
         AppState.notices.push({ id: Date.now(), author: author, content: content, timestamp: Date.now() });
         document.getElementById('addNoticeModal').classList.remove('show');
         showToast('নতুন নোটিশ দেওয়া হয়েছে!', 'success');
-        saveData();
+        await saveData();
         window.refreshAll();
     });
 }
 
 const btnSaveBazaar = document.getElementById('saveBazaarBtn');
 if (btnSaveBazaar) {
-    btnSaveBazaar.addEventListener('click', function(e) {
+    btnSaveBazaar.addEventListener('click', async function(e) {
         e.preventDefault();
         const memId = parseInt(document.getElementById('bazaarMemberSelect').value);
         const details = document.getElementById('bazaarDetails').value.trim() || "-";
@@ -1254,7 +1215,7 @@ if (btnSaveBazaar) {
         });
         document.getElementById('addBazaarModal').classList.remove('show');
         showToast('বাজার সফলভাবে যোগ হয়েছে!', 'success');
-        saveData();
+        await saveData();
         window.refreshAll();
     });
 }
