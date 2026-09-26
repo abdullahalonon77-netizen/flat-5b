@@ -1615,6 +1615,7 @@ if(saveMealBtn) {
         });
         document.getElementById('editMealModal').classList.remove('show');
         showToast('মিল সফলভাবে আপডেট হয়েছে!', 'success');
+        saveData(); // <--- Ekhaneo ei line ta add korbe!
         window.refreshAll();
     });
 }
