@@ -154,25 +154,22 @@ onValue(databaseRef, (snapshot) => {
     const currentActiveUser = AppState.activeUserId;
 
     if (data && typeof data === 'object') {
-        AppState.currentMonth = Number.isFinite(Number(data.currentMonth))
-            ? Number(data.currentMonth)
-            : AppState.currentMonth || defaultState.currentMonth;
-
-        AppState.currentYear = Number.isFinite(Number(data.currentYear))
-            ? Number(data.currentYear)
-            : AppState.currentYear || defaultState.currentYear;
+        AppState.currentMonth = Number.isFinite(Number(data.currentMonth)) ? Number(data.currentMonth) : defaultState.currentMonth;
+        AppState.currentYear = Number.isFinite(Number(data.currentYear)) ? Number(data.currentYear) : defaultState.currentYear;
 
         AppState.guestMeals = normalizeObject(data.guestMeals);
         AppState.vacations = normalizeObject(data.vacations);
-        AppState.todaysMenu = typeof data.todaysMenu === 'string'
-            ? data.todaysMenu
-            : (AppState.todaysMenu || '');
+        AppState.todaysMenu = typeof data.todaysMenu === 'string' ? data.todaysMenu : '';
 
-        AppState.members = normalizeArray(data.members);
+        AppState.members = normalizeArray(data.members).length > 0 ? normalizeArray(data.members) : defaultState.members;
         AppState.bazaarRecords = normalizeArray(data.bazaarRecords);
         AppState.notices = normalizeArray(data.notices);
         AppState.meals = normalizeMeals(data.meals);
         AppState.history = normalizeObject(data.history);
+        
+        if (data.mealPreferences) {
+            AppState.mealPreferences = normalizeObject(data.mealPreferences);
+        }
 
         AppState.isAdmin = currentAdminStatus;
         AppState.activeUserId = currentActiveUser;
@@ -189,26 +186,24 @@ onValue(databaseRef, (snapshot) => {
 
     if (isInitialLoad) {
         isInitialLoad = false;
-
-        if (!data) {
-            saveData();
-        } else if (pendingSave) {
+        if (!data || pendingSave) {
             pendingSave = false;
             saveData();
         }
     }
 
-    if (typeof window.checkAndResetNewMonth === 'function') {
-        window.checkAndResetNewMonth();
-    }
+    // ড্রপডাউন এবং অন্যান্য বেসিক UI আপডেট (এটাই ক্যালেন্ডারের মাসের সমস্যার সমাধান)
+    if (typeof populateMemberDropdowns === 'function') populateMemberDropdowns();
+    if (typeof populateMonthDropdown === 'function') populateMonthDropdown();
+    if (typeof window.populateCalendarMonthDropdown === 'function') window.populateCalendarMonthDropdown();
+    
+    if (typeof window.checkAndResetNewMonth === 'function') window.checkAndResetNewMonth();
+    if (typeof window.refreshAll === 'function') window.refreshAll();
 
-    if (typeof window.refreshAll === 'function') {
-        window.refreshAll();
-    }
 }, (error) => {
     isFetching = false;
-    console.error("ফায়ারবেস ডাটা পড়তে সমস্যা হয়েছে:", error);
-    showToast('ফায়ারবেস থেকে ডাটা লোড করা যায়নি।', 'error');
+    console.error("ফায়ারবেস ডেটা পড়তে সমস্যা হয়েছে:", error);
+    showToast('ফায়ারবেস থেকে ডেটা লোড করা যায়নি।', 'error');
 });
 
 function convertToBanglaNumber(engNum) {
@@ -477,29 +472,66 @@ document.querySelectorAll('.nav-item').forEach(function(navItem) {
     });
 });
 
-function isTimePassedStrictly(day, type) {
+// সময়ের লজিক: রাত ১০টা থেকে দুপুর ১টা পর্যন্ত সকালের মিল, বাকি সময় রাতের মিল
+function getUpcomingMealInfo() {
     const now = new Date();
-    const currentDay = now.getDate();
-    const currentHour = now.getHours();
-    if (day < currentDay) {
+    const hour = now.getHours();
+    const day = now.getDate();
+    
+    if (hour >= 22 || hour < 13) {
+        const displayDay = (hour >= 22) ? (day + 1 > 31 ? 1 : day + 1) : day;
+        return { day: displayDay, type: 'morning', label: 'সকালের মিল আপডেট করুন' };
+    } else {
+        return { day: day, type: 'night', label: 'রাতের মিল আপডেট করুন' };
+    }
+}
+
+// মিল লক হওয়ার কড়া লজিক (আগের মাসের ডেটা হলে অটো লক)
+function isTimePassedStrictly(day, type) {
+    if (!AppState.meals[day]) return false;
+
+    const now = new Date();
+    const realDay = now.getDate();
+    const realMonth = now.getMonth() + 1;
+    const realYear = now.getFullYear();
+
+    if (AppState.currentYear < realYear || (AppState.currentYear === realYear && AppState.currentMonth < realMonth)) {
         return true;
     }
-    if (day === currentDay) {
-        if (type === 'morning') {
-            return currentHour >= 8;
-        } else if (type === 'night') {
-            return currentHour >= 18;
-        }
-    }
-    return false;
+
+    if (day < realDay) return true;
+
+    return AppState.meals[day].khalaStatus[type] !== 'pending';
 }
 
 function isMealLocked(day, type) {
-    if (AppState.isAdmin) {
-        return false;
-    }
+    if (AppState.isAdmin) return false;
     return isTimePassedStrictly(day, type);
 }
+
+// ড্রপডাউনে মাসগুলো লোড করার ফাংশন (যাতে ক্যালেন্ডারে মাসগুলো আসে)
+window.populateCalendarMonthDropdown = function() {
+    const selectEl = document.getElementById('calendarMonthSelect');
+    if (!selectEl) return;
+    selectEl.innerHTML = '';
+    
+    const monthNames = ["জানুয়ারি", "ফেব্রুয়ারি", "মার্চ", "এপ্রিল", "মে", "জুন", "জুলাই", "আগস্ট", "সেপ্টেম্বর", "অক্টোবর", "নভেম্বর", "ডিসেম্বর"];
+    
+    selectEl.insertAdjacentHTML('beforeend', `<option value="current" selected>${monthNames[AppState.currentMonth - 1]} ${convertToBanglaNumber(AppState.currentYear)} (চলতি মাস)</option>`);
+    
+    if (AppState.history) {
+        Object.keys(AppState.history).sort().reverse().forEach(key => {
+            const splitKey = key.split('-');
+            const y = splitKey[0];
+            const m = splitKey[1];
+            const monthName = monthNames[parseInt(m) - 1];
+            selectEl.insertAdjacentHTML('beforeend', `<option value="${key}">${monthName} ${convertToBanglaNumber(y)}</option>`);
+        });
+    }
+    
+    selectEl.removeEventListener('change', window.renderCalendar);
+    selectEl.addEventListener('change', window.renderCalendar);
+};
 
 function calculateTotals() {
     let totalBazaar = 0;
@@ -866,13 +898,16 @@ window.populateMonthDropdown = function() {
     const selectEl = document.getElementById('reportMonthSelect');
     if (!selectEl) return;
     selectEl.innerHTML = '';
+    
     const monthNames = ["জানুয়ারি", "ফেব্রুয়ারি", "মার্চ", "এপ্রিল", "মে", "জুন", "জুলাই", "আগস্ট", "সেপ্টেম্বর", "অক্টোবর", "নভেম্বর", "ডিসেম্বর"];
     const currentM = AppState.currentMonth; 
     const currentY = AppState.currentYear;
+    
     for (let m = 1; m <= 12; m++) {
         const historyKey = `${currentY}-${String(m).padStart(2, '0')}`;
-        let optionLabel = `${monthNames[m - 1]}${convertToBanglaNumber(currentY)}`;
+        let optionLabel = `${monthNames[m - 1]} ${convertToBanglaNumber(currentY)}`;
         let optionValue = historyKey;
+        
         if (m === currentM) {
             optionLabel += " (চলতি মাস)";
             optionValue = "current";
@@ -880,98 +915,99 @@ window.populateMonthDropdown = function() {
             optionLabel += " (আগামী মাস)";
             optionValue = "upcoming"; 
         }
+        
         const isSelected = (m === currentM) ? "selected" : "";
-        const html = `<option value="${optionValue}" ${isSelected}>${optionLabel}</option>`;
-        selectEl.insertAdjacentHTML('beforeend', html);
+        selectEl.insertAdjacentHTML('beforeend', `<option value="${optionValue}" ${isSelected}>${optionLabel}</option>`);
     }
-    selectEl.removeEventListener('change', renderMonthlySummary);
-    selectEl.addEventListener('change', renderMonthlySummary);
+
+    selectEl.removeEventListener('change', window.renderMonthlySummary);
+    selectEl.addEventListener('change', window.renderMonthlySummary);
+};
+
+window.populateMonthDropdown = function() {
+    const selectEl = document.getElementById('reportMonthSelect');
+    if (!selectEl) return;
+    selectEl.innerHTML = '';
+    
+    const monthNames = ["জানুয়ারি", "ফেব্রুয়ারি", "মার্চ", "এপ্রিল", "মে", "জুন", "জুলাই", "আগস্ট", "সেপ্টেম্বর", "অক্টোবর", "নভেম্বর", "ডিসেম্বর"];
+    const currentM = AppState.currentMonth; 
+    const currentY = AppState.currentYear;
+    
+    for (let m = 1; m <= 12; m++) {
+        const historyKey = `${currentY}-${String(m).padStart(2, '0')}`;
+        let optionLabel = `${monthNames[m - 1]} ${convertToBanglaNumber(currentY)}`;
+        let optionValue = historyKey;
+        
+        if (m === currentM) {
+            optionLabel += " (চলতি মাস)";
+            optionValue = "current";
+        } else if (m > currentM) {
+            optionLabel += " (আগামী মাস)";
+            optionValue = "upcoming"; 
+        }
+        
+        const isSelected = (m === currentM) ? "selected" : "";
+        selectEl.insertAdjacentHTML('beforeend', `<option value="${optionValue}" ${isSelected}>${optionLabel}</option>`);
+    }
+
+    selectEl.removeEventListener('change', window.renderMonthlySummary);
+    selectEl.addEventListener('change', window.renderMonthlySummary);
 };
 
 window.renderMonthlySummary = function() {
     const selectEl = document.getElementById('reportMonthSelect');
     const contentBox = document.getElementById('monthlySummaryContent');
     if (!selectEl || !contentBox) return;
+    
     const selectedValue = selectEl.value;
 
     if (selectedValue === 'upcoming') {
-        contentBox.innerHTML = `
-            <div style="text-align:center; padding: 60px 0;">
-                <h3 style="color:#a3aed1; font-size:22px; font-weight:700;">এই মাসের ডেটা এখনও তৈরি হয়নি!</h3>
-                <p style="color:#707eae; font-size:16px;">মাস শুরু হলে তবেই হিসাব দেখা যাবে।</p>
-            </div>`;
+        contentBox.innerHTML = `<div style="text-align:center; padding: 60px 0;"><h3 style="color:#a3aed1;">এই মাসের ডেটা এখনও তৈরি হয়নি!</h3></div>`;
         return;
     }
 
     let sourceMeals = AppState.meals;
     let sourceBazaar = AppState.bazaarRecords;
-    let finalArchivedRate = null;
-    let targetYearStr, targetMonthStr;
-    
-    if (selectedValue === 'current') {
-        targetYearStr = AppState.currentYear;
-        targetMonthStr = String(AppState.currentMonth).padStart(2, '0');
-    } else {
-        const splitVal = selectedValue.split('-');
-        targetYearStr = splitVal[0];
-        targetMonthStr = splitVal[1];
-    }
-    
-    let targetMonthNum = parseInt(targetMonthStr);
-    let targetYearNum = parseInt(targetYearStr);
-    let daysInTargetMonth = getDaysInMonth(targetMonthNum, targetYearNum);
+    let targetMonthNum = AppState.currentMonth;
+    let targetYearNum = AppState.currentYear;
 
     if (selectedValue !== 'current') {
+        const splitVal = selectedValue.split('-');
+        targetYearNum = parseInt(splitVal[0]);
+        targetMonthNum = parseInt(splitVal[1]);
         if (AppState.history && AppState.history[selectedValue]) {
             sourceMeals = AppState.history[selectedValue].meals;
             sourceBazaar = AppState.history[selectedValue].bazaarRecords;
-            finalArchivedRate = AppState.history[selectedValue].finalRate;
         } else {
-            contentBox.innerHTML = `
-                <div style="text-align:center; padding: 60px 0;">
-                    <h3 style="color:#fc6076; font-size:22px; font-weight:700;">কোনো তথ্য পাওয়া যায়নি!</h3>
-                </div>`;
+            contentBox.innerHTML = `<div style="text-align:center; padding: 60px 0;"><h3 style="color:#fc6076;">কোনো তথ্য পাওয়া যায়নি!</h3></div>`;
             return;
         }
     }
 
+    let daysInTargetMonth = new Date(targetYearNum, targetMonthNum, 0).getDate();
     let totalBazaarAmount = 0;
-    sourceBazaar.forEach(function(record) {
-        totalBazaarAmount += (record.amount || 0);
-    });
+    sourceBazaar.forEach(record => totalBazaarAmount += (record.amount || 0));
     
     let totalMealsCount = 0;
     for (let d = 1; d <= daysInTargetMonth; d++) {
         if (sourceMeals[d]) {
             if (selectedValue !== 'current' || isTimePassedStrictly(d, 'morning') || sourceMeals[d].khalaStatus?.morning === 'yes') {
-                AppState.members.forEach(function(m) {
-                    totalMealsCount += (sourceMeals[d].morning[m.id] || 0);
-                });
+                AppState.members.forEach(m => totalMealsCount += (sourceMeals[d].morning[m.id] || 0));
             }
             if (selectedValue !== 'current' || isTimePassedStrictly(d, 'night') || sourceMeals[d].khalaStatus?.night === 'yes') {
-                AppState.members.forEach(function(m) {
-                    totalMealsCount += (sourceMeals[d].night[m.id] || 0);
-                });
+                AppState.members.forEach(m => totalMealsCount += (sourceMeals[d].night[m.id] || 0));
             }
         }
     }
+    totalMealsCount = Math.round(totalMealsCount * 1000) / 1000;
 
-    let calculatedRate = 0;
-    if (finalArchivedRate !== null) {
-        calculatedRate = finalArchivedRate;
-    } else if (totalMealsCount > 0) {
-        calculatedRate = totalBazaarAmount / totalMealsCount;
-    }
+    let calculatedRate = totalMealsCount > 0 ? (totalBazaarAmount / totalMealsCount) : 0;
 
     let tableHtml = `<table class="bazaar-table"><thead><tr><th>মেম্বার</th><th>মোট মিল</th><th>খরচ</th><th>বাজার জমা</th><th>পাবে/দিবে</th></tr></thead><tbody>`;
     
     AppState.members.forEach(function(member) {
         let memberBazaar = 0;
-        sourceBazaar.forEach(function(record) {
-            if (record.memberId === member.id) {
-                memberBazaar += (record.amount || 0);
-            }
-        });
+        sourceBazaar.forEach(r => { if (r.memberId === member.id) memberBazaar += (r.amount || 0); });
         
         let memberMeals = 0; 
         for (let d = 1; d <= daysInTargetMonth; d++) { 
@@ -984,15 +1020,35 @@ window.renderMonthlySummary = function() {
                 }
             }
         }
+        memberMeals = Math.round(memberMeals * 1000) / 1000;
+
+        if (selectedValue !== 'current' && memberMeals === 0 && memberBazaar === 0) return;
         
         let mealCost = memberMeals * calculatedRate;
         let balance = memberBazaar - mealCost;
-        let balanceOutput = balance >= 0 ? `<span style="color:var(--success-color)">পাবে: ${formatCurrency(balance)}</span>` : `<span style="color:var(--danger-color)">দিবে: ${formatCurrency(Math.abs(balance))}</span>`;
+        let cleanBalance = parseFloat(balance.toFixed(2));
         
-        tableHtml += `<tr><td><b>${member.name}</b></td><td>${convertToBanglaNumber(memberMeals)}</td><td>${formatCurrency(mealCost)}</td><td>${formatCurrency(memberBazaar)}</td><td>${balanceOutput}</td></tr>`;
+        let balanceOutput = cleanBalance >= 0 
+            ? `<span style="color:var(--success-color); font-weight:800;">পাবে: ${formatCurrency(cleanBalance)}</span>`
+            : `<span style="color:var(--danger-color); font-weight:800;">দিবে: ${formatCurrency(Math.abs(cleanBalance))}</span>`;
+        
+        tableHtml += `<tr>
+            <td><b>${member.name}</b></td>
+            <td>${convertToBanglaNumber(memberMeals)}</td>
+            <td class="text-danger">${formatCurrency(mealCost)}</td>
+            <td class="text-success">${formatCurrency(memberBazaar)}</td>
+            <td>${balanceOutput}</td>
+        </tr>`;
     });
     
-    tableHtml += `</tbody></table>`;
+    tableHtml += `<tr class="total-row" style="background: var(--bg-sidebar); color: white;">
+        <td>সর্বমোট</td>
+        <td>${convertToBanglaNumber(totalMealsCount)}</td>
+        <td>-</td>
+        <td>${formatCurrency(totalBazaarAmount)}</td>
+        <td>রেট: ${formatCurrency(calculatedRate)}</td>
+    </tr></tbody></table>`;
+    
     contentBox.innerHTML = tableHtml;
 };
 
@@ -1020,21 +1076,112 @@ window.setDailyMotivation = function() {
     }
 };
 
+window.exportMealCalendarToImage = function() {
+    const tableElement = document.getElementById('mealTable');
+    if (!tableElement) return showToast('ক্যালেন্ডার ডাটা পাওয়া যায়নি!', 'error');
+
+    showToast('High-Quality ছবি তৈরি হচ্ছে... দয়া করে অপেক্ষা করুন।', 'success');
+
+    const appWrapper = document.querySelector('.app-wrapper');
+    if (appWrapper) appWrapper.style.display = 'none';
+
+    const imageContainer = document.createElement('div');
+    imageContainer.id = 'imageExportContainer';
+    imageContainer.style.cssText = 'width: 1200px; background: #ffffff; padding: 40px; position: absolute; top: 0; left: 0; z-index: 999999;';
+
+    const clonedTable = tableElement.cloneNode(true);
+    clonedTable.querySelectorAll('tr').forEach(row => {
+        if (row.children.length > 0) row.removeChild(row.lastElementChild);
+    });
+
+    clonedTable.style.width = '100%';
+    clonedTable.style.borderCollapse = 'collapse';
+    clonedTable.querySelectorAll('th').forEach(th => th.style.cssText = 'background-color: #4361ee; color: #ffffff; border: 1px solid #4361ee; padding: 15px; font-size: 16px; font-weight: bold;');
+    clonedTable.querySelectorAll('td').forEach(td => td.style.cssText = 'border: 1px solid #cbd5e1; padding: 12px; font-size: 15px; font-weight: bold; text-align: center;');
+
+    imageContainer.innerHTML = `
+        <div style="text-align:center; margin-bottom: 30px; border-bottom: 3px solid #4361ee; padding-bottom: 20px;">
+            <h1 style="color:#111c43; font-size: 36px;">Monthly Meal Report</h1>
+            <p style="color:#4361ee; font-size: 22px;">Month: ${convertToBanglaNumber(AppState.currentMonth)} | Year: ${convertToBanglaNumber(AppState.currentYear)}</p>
+        </div>
+        ${clonedTable.outerHTML}
+    `;
+
+    document.body.appendChild(imageContainer);
+
+    const restoreUI = () => {
+        if (document.body.contains(imageContainer)) document.body.removeChild(imageContainer);
+        if (appWrapper) appWrapper.style.display = 'flex';
+    };
+
+    const processImage = () => {
+        setTimeout(() => {
+            html2canvas(imageContainer, { scale: 3, useCORS: true, backgroundColor: "#ffffff" }).then(canvas => {
+                const link = document.createElement('a');
+                link.download = `Meal_Report_${AppState.currentMonth}_${AppState.currentYear}.png`;
+                link.href = canvas.toDataURL('image/png');
+                link.click();
+                showToast('ছবি ডাউনলোড সফল হয়েছে!', 'success');
+                restoreUI();
+            }).catch(e => { restoreUI(); showToast('ছবি তৈরিতে সমস্যা হয়েছে!', 'error'); });
+        }, 1000);
+    };
+
+    if (typeof html2canvas === 'undefined') {
+        const script = document.createElement('script');
+        script.src = "https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js";
+        script.onload = processImage;
+        document.head.appendChild(script);
+    } else {
+        processImage();
+    }
+};
+
+// ডাউনলোড বাটনের ইভেন্ট লিসেনার
+const printBtn = document.getElementById('printReportBtn');
+if (printBtn) {
+    printBtn.addEventListener('click', function() {
+        window.exportMealCalendarToImage();
+    });
+}
+
 window.refreshAll = function() {
     if (typeof populateMemberDropdowns === 'function') populateMemberDropdowns();
     if (typeof updateDashboardStats === 'function') updateDashboardStats();
     if (typeof updateNextMealDisplay === 'function') updateNextMealDisplay();
     if (typeof updateQuickMealToggle === 'function') updateQuickMealToggle();
-    if (typeof renderCalendar === 'function') renderCalendar();
+    if (typeof window.renderCalendar === 'function') window.renderCalendar();
     if (typeof renderBazaarList === 'function') renderBazaarList();
-    if (typeof renderTodaysMenu === 'function') renderTodaysMenu();
-    if (typeof renderMissedMeals === 'function') renderMissedMeals();
     if (typeof renderGuestMealBox === 'function') renderGuestMealBox();
     if (typeof renderVacationBox === 'function') renderVacationBox();
-    if (typeof renderMonthlySummary === 'function') renderMonthlySummary();
-    
-    // নতুন যুক্ত করা রুটিন ফাংশন
+    if (typeof window.renderMonthlySummary === 'function') window.renderMonthlySummary();
+    if (typeof updateKhalaUI === 'function') updateKhalaUI();
     if (typeof setupPermanentMealSettings === 'function') setupPermanentMealSettings();
+    if (typeof renderTodaysMenu === 'function') renderTodaysMenu();
+    if (typeof renderMissedMeals === 'function') renderMissedMeals();
+
+    // নোটিশ বোর্ড লজিক
+    const noticeContainer = document.getElementById('noticeContainer');
+    if (noticeContainer) {
+        noticeContainer.innerHTML = '';
+        AppState.notices = AppState.notices.filter(notice => (Date.now() - notice.timestamp) <= 604800000); 
+        const reversedNotices = [...AppState.notices].reverse();
+        
+        reversedNotices.forEach((notice, index) => {
+            let deleteBtn = AppState.isAdmin ? `<button style="background:var(--danger-light); color:var(--danger-color); border:none; border-radius:50%; width:30px; height:30px; cursor:pointer;" onclick="customConfirm('মুছে ফেলবেন?', async function() { AppState.notices = AppState.notices.filter(x => x.id !== ${notice.id}); await saveData(); refreshAll(); })">&times;</button>` : '';
+            const borderStyle = index === 0 ? 'border-left: 5px solid var(--info-color);' : 'border-left: 5px solid #edf2f9;';
+            
+            noticeContainer.insertAdjacentHTML('beforeend', `
+                <div style="background:#fff; padding:20px; border-radius:15px; margin-bottom:15px; box-shadow:var(--shadow-sm); ${borderStyle}">
+                    <div style="display:flex; justify-content:space-between; margin-bottom:10px;">
+                        <div><span style="font-size:13px; color:gray;">${getBengaliDate(new Date(notice.timestamp))}</span> <b style="color:var(--primary-color); margin-left:10px;">${notice.author}</b></div>
+                        ${deleteBtn}
+                    </div>
+                    <p>${notice.content}</p>
+                </div>
+            `);
+        });
+    }
 };
 
 window.renderCalendar = function() {
@@ -1170,6 +1317,7 @@ function getUpcomingMealInfo() {
     return { day: nextDay, type: 'morning', label: 'আগামীকাল সকালের মিল' };
 }
 
+// লাইভ বোর্ড আপডেট লজিক
 window.updateNextMealDisplay = function() {
     const info = getUpcomingMealInfo();
     const labelEl = document.getElementById('nextMealLabel');
@@ -1177,7 +1325,6 @@ window.updateNextMealDisplay = function() {
     const boardTitle = document.getElementById('currentMealBoardTitle');
     const boardList = document.getElementById('currentMealBoardList');
     
-    // Safety Fallback: Jodi data na thake tahole auto toiri kore nibe
     if (!AppState.meals[info.day]) {
         AppState.meals[info.day] = { morning: {}, night: {}, khalaStatus: { morning: 'pending', night: 'pending' } };
     }
@@ -1223,12 +1370,12 @@ window.updateNextMealDisplay = function() {
     if(boardList) boardList.innerHTML = boardHtml;
 };
 
+// Quick Meal Swipe Toggle Logic (লোড হচ্ছে ফিক্স সহ)
 window.updateQuickMealToggle = function() {
     const info = getUpcomingMealInfo();
     const toggleBoxOuter = document.querySelector('.quick-toggle-box-large');
     const toggleLabel = document.getElementById('quickMealLabel');
     
-    // Safety Fallback
     if (!AppState.meals[info.day]) {
         AppState.meals[info.day] = { morning: {}, night: {}, khalaStatus: { morning: 'pending', night: 'pending' } };
     }
@@ -1248,7 +1395,7 @@ window.updateQuickMealToggle = function() {
     const halfContainer = document.getElementById('halfMealOptionContainer');
     const statusTxt = document.getElementById('quickMealStatusTxt');
 
-    // User Login na thakle jeno error na dey
+    // ইউজার সিলেক্ট না করা থাকলে ওয়ার্নিং
     if(!uid) {
         if(mainToggleWrapper) mainToggleWrapper.style.display = 'none';
         if(halfContainer) halfContainer.style.display = 'none';
@@ -1305,26 +1452,29 @@ window.updateQuickMealToggle = function() {
         statusTxt.innerHTML += `<br><span style="color:var(--success-color); font-size:15px; display:block; margin-top:5px; font-weight:800;">+ সাথে ${convertToBanglaNumber(activeGuestCount)} টি গেস্ট মিল যোগ করা আছে</span>`;
     }
     
-    newToggle.addEventListener('change', function() {
+    newToggle.addEventListener('change', async function() {
         if(!this.checked) {
             if(halfContainer) halfContainer.style.display = 'none';
             AppState.meals[info.day][info.type][uid] = 0 + activeGuestCount;
             showToast('আপনার নিজের মিল অফ করা হয়েছে!', 'success');
-            refreshAll();
+            await saveData();
+            window.refreshAll();
         } else {
             if (!isRoutineOn) {
                 const waktName = info.type === 'morning' ? 'সকালের' : 'রাতের';
-                window.customConfirm(`আপনার নিয়মিত রুটিনে ${waktName} মিল বন্ধ আছে।\n\nআপনি কি শুধুমাত্র আজকের জন্য মিলটি চালু করতে চান?`, function() {
+                window.customConfirm(`আপনার নিয়মিত রুটিনে ${waktName} মিল বন্ধ আছে।\n\nআপনি কি শুধুমাত্র আজকের জন্য মিলটি চালু করতে চান?`, async function() {
                     AppState.meals[info.day][info.type][uid] = 1 + activeGuestCount;
                     showToast(`শুধুমাত্র আজকের ${waktName} মিল চালু করা হয়েছে!`, 'success');
-                    refreshAll();
+                    await saveData();
+                    window.refreshAll();
                 });
                 newToggle.checked = false; 
             } else {
                 if(halfContainer) halfContainer.style.display = 'block';
                 AppState.meals[info.day][info.type][uid] = 1 + activeGuestCount;
                 showToast('আপনার নিজের মিল চালু করা হয়েছে!', 'success');
-                refreshAll();
+                await saveData();
+                window.refreshAll();
             }
         }
     });
@@ -1346,16 +1496,18 @@ window.updateQuickMealToggle = function() {
             newBtnFull.style.borderColor = 'transparent';
         }
         
-        newBtnFull.addEventListener('click', function() {
+        newBtnFull.addEventListener('click', async function() {
             AppState.meals[info.day][info.type][uid] = 1 + activeGuestCount;
             showToast('নিজের মিল ফুল (১) করা হয়েছে!', 'success');
-            refreshAll();
+            await saveData();
+            window.refreshAll();
         });
         
-        newBtnHalf.addEventListener('click', function() {
+        newBtnHalf.addEventListener('click', async function() {
             AppState.meals[info.day][info.type][uid] = 0.5 + activeGuestCount;
             showToast('নিজের মিল হাফ (০.৫) করা হয়েছে!', 'success');
-            refreshAll();
+            await saveData();
+            window.refreshAll();
         });
     }
 };
@@ -1374,6 +1526,178 @@ window.renderBazaarList = function() {
     });
     totalEl.innerText = formatCurrency(total);
 };
+
+
+// খালার স্ট্যাটাস UI আপডেট লজিক (Hardcore Fade Logic)
+window.updateKhalaUI = function() {
+    const info = getUpcomingMealInfo();
+    if (!info) return;
+
+    const currentStatus = AppState.meals[info.day]?.khalaStatus[info.type] || 'pending';
+    
+    const khalaSectionContainer = document.getElementById('khalaSectionContainer');
+    const khalaActions = document.getElementById('khalaActions');
+    const khalaStatusText = document.getElementById('khalaStatusText');
+    const resetBtn = document.getElementById('adminResetKhalaBtn');
+    const questionText = document.getElementById('khalaQuestionText');
+
+    const now = new Date();
+    const hour = now.getHours();
+
+    let totalUpcomingMeals = 0;
+    if (AppState.meals[info.day]) {
+        AppState.members.forEach(m => {
+            totalUpcomingMeals += (parseFloat(AppState.meals[info.day][info.type][m.id]) || 0);
+        });
+    }
+    totalUpcomingMeals = Math.round(totalUpcomingMeals * 1000) / 1000;
+
+    let isKhalaActionActive = false;
+    let waitMessage = "";
+
+    if (totalUpcomingMeals <= 0) {
+        isKhalaActionActive = false;
+        waitMessage = "সবার মিল অফ থাকায় খালার আপডেট বন্ধ আছে";
+    } else {
+        if (info.type === 'morning') {
+            if (hour >= 6 && hour < 13) isKhalaActionActive = true;
+            else waitMessage = "সকাল ৬ টার পর খালার আপডেট দেওয়া যাবে";
+        } else if (info.type === 'night') {
+            if (hour >= 17 && hour < 22) isKhalaActionActive = true;
+            else waitMessage = "বিকাল ৫ টার পর খালার আপডেট দেওয়া যাবে";
+        }
+    }
+
+    if (currentStatus === 'pending') {
+        if (isKhalaActionActive) {
+            if(khalaSectionContainer) {
+                khalaSectionContainer.style.opacity = '1';
+                khalaSectionContainer.style.pointerEvents = 'auto';
+                khalaSectionContainer.style.filter = 'none';
+            }
+            if(khalaActions) khalaActions.style.display = 'flex';
+            if(khalaStatusText) khalaStatusText.style.display = 'none';
+            if(questionText) {
+                questionText.style.display = 'block';
+                questionText.innerText = "রান্নার জন্য খালা এসেছে কি না?";
+                questionText.style.color = '#fff';
+            }
+        } else {
+            if(khalaSectionContainer) {
+                khalaSectionContainer.style.opacity = '0.4';
+                khalaSectionContainer.style.pointerEvents = 'none';
+                khalaSectionContainer.style.filter = 'grayscale(100%)';
+            }
+            if(khalaActions) khalaActions.style.display = 'none';
+            if(khalaStatusText) khalaStatusText.style.display = 'none';
+            if(questionText) {
+                questionText.style.display = 'block';
+                questionText.innerText = waitMessage;
+                questionText.style.color = '#ffeb3b';
+            }
+        }
+    } else {
+        if(khalaSectionContainer) {
+            khalaSectionContainer.style.opacity = '1';
+            khalaSectionContainer.style.pointerEvents = 'auto';
+            khalaSectionContainer.style.filter = 'none';
+        }
+        if(khalaActions) khalaActions.style.display = 'none';
+        if(questionText) questionText.style.display = 'none';
+        if(khalaStatusText) {
+            khalaStatusText.style.display = 'block';
+            if (currentStatus === 'yes') {
+                const waktName = info.type === 'morning' ? 'সকালের' : 'রাতের';
+                khalaStatusText.innerHTML = `<span style="color:var(--success-color); font-size:18px;">খালা এসেছে! আজ ${waktName} মোট মিল: ${convertToBanglaNumber(totalUpcomingMeals)} টি।</span>`;
+            } else {
+                khalaStatusText.innerHTML = `<span style="color:var(--danger-color); font-size:18px;">খালা আসেনি! সবার মিল ০ হয়ে গেছে।</span>`;
+            }
+        }
+    }
+
+    if (resetBtn) {
+        resetBtn.style.display = (currentStatus !== 'pending' && AppState.isAdmin) ? 'block' : 'none';
+    }
+};
+
+// খালার বাটনের অ্যাকশন (Yes, No, Reset)
+const btnKhalaYes = document.getElementById('khalaYesBtn');
+if(btnKhalaYes) {
+    const newYesBtn = btnKhalaYes.cloneNode(true);
+    btnKhalaYes.replaceWith(newYesBtn);
+    newYesBtn.addEventListener('click', async function() {
+        const info = getUpcomingMealInfo();
+        AppState.meals[info.day].khalaStatus[info.type] = 'yes';
+        
+        let thisWaktTotal = 0;
+        AppState.members.forEach(m => {
+            thisWaktTotal += (AppState.meals[info.day][info.type][m.id] || 0);
+        });
+
+        showToast(`কনফার্ম: খালা এসেছে। ${info.label} ${convertToBanglaNumber(thisWaktTotal)} টি।`, 'success');
+        await saveData();
+        window.refreshAll();
+    });
+}
+
+const btnKhalaNo = document.getElementById('khalaNoBtn');
+if(btnKhalaNo) {
+    const newNoBtn = btnKhalaNo.cloneNode(true);
+    btnKhalaNo.replaceWith(newNoBtn);
+    newNoBtn.addEventListener('click', function() {
+        window.customConfirm("খালা আসেনি? সবার মিল জিরো (০) হয়ে যাবে। নিশ্চিত?", async function() {
+            const info = getUpcomingMealInfo();
+            // স্ন্যাপশট ব্যাকআপ
+            AppState.meals[info.day][info.type + '_backup'] = JSON.parse(JSON.stringify(AppState.meals[info.day][info.type]));
+            AppState.meals[info.day].khalaStatus[info.type] = 'no';
+            
+            AppState.members.forEach(m => { AppState.meals[info.day][info.type][m.id] = 0; });
+            showToast('খালা আসেনি! সবার মিল ০ করে দেওয়া হয়েছে।', 'error');
+            await saveData();
+            window.refreshAll();
+        });
+    });
+}
+
+const btnAdminResetKhala = document.getElementById('adminResetKhalaBtn');
+if(btnAdminResetKhala) {
+    const newResetBtn = btnAdminResetKhala.cloneNode(true);
+    btnAdminResetKhala.replaceWith(newResetBtn);
+    
+    newResetBtn.addEventListener('click', async function() {
+        const info = getUpcomingMealInfo();
+        const now = new Date();
+        const hour = now.getHours();
+        const currentDay = now.getDate();
+        
+        let isTimePassed = false;
+        if (info.day < currentDay) {
+            isTimePassed = true;
+        } else if (info.day === currentDay) {
+            if (info.type === 'morning' && hour >= 13) isTimePassed = true;
+            if (info.type === 'night' && hour >= 22) isTimePassed = true;
+        }
+
+        if (isTimePassed) {
+            AppState.meals[info.day].khalaStatus[info.type] = 'no';
+            AppState.members.forEach(m => { AppState.meals[info.day][info.type][m.id] = 0; });
+            showToast('সময় পার হয়ে যাওয়ায় সবার মিল ০ হয়ে গেছে!', 'error');
+        } else {
+            AppState.meals[info.day].khalaStatus[info.type] = 'pending';
+            
+            // রিস্টোর লজিক
+            if (AppState.meals[info.day][info.type + '_backup']) {
+                AppState.meals[info.day][info.type] = JSON.parse(JSON.stringify(AppState.meals[info.day][info.type + '_backup']));
+                delete AppState.meals[info.day][info.type + '_backup']; 
+                showToast('রিসেট সম্পন্ন! সবার আগের মিল ঠিকঠাক রিস্টোর করা হয়েছে।', 'success');
+            } else {
+                showToast('রিসেট সম্পন্ন! স্ট্যাটাস আবার পেন্ডিং করা হয়েছে।', 'success');
+            }
+        }
+        await saveData();
+        window.refreshAll();
+    });
+}
 
 window.populateCalendarMonthDropdown = function() {
     const selectEl = document.getElementById('calendarMonthSelect');
@@ -1470,6 +1794,56 @@ if (btnSaveMem) {
     });
 }
 
+// অটোমেটিক টাইম আউট এবং ব্যাকআপ লজিক
+window.checkAndApplyKhalaTimeout = async function() {
+    const now = new Date();
+    const hour = now.getHours();
+    const currentDay = now.getDate();
+    let isDataChanged = false;
+
+    for (let day = 1; day <= currentDay; day++) {
+        if (!AppState.meals[day]) continue;
+        
+        // সকালের মিল: দুপুর ১টা (13:00) বেজে গেলে
+        if (day < currentDay || (day === currentDay && hour >= 13)) {
+            if (AppState.meals[day].khalaStatus.morning === 'pending') {
+                AppState.meals[day]['morning_auto_backup'] = JSON.parse(JSON.stringify(AppState.meals[day].morning));
+                AppState.meals[day].khalaStatus.morning = 'no'; 
+                AppState.members.forEach(m => { AppState.meals[day].morning[m.id] = 0; });
+                isDataChanged = true;
+            }
+        }
+
+        // রাতের মিল: রাত ১০টা (22:00) বেজে গেলে
+        if (day < currentDay || (day === currentDay && hour >= 22)) {
+            if (AppState.meals[day].khalaStatus.night === 'pending') {
+                AppState.meals[day]['night_auto_backup'] = JSON.parse(JSON.stringify(AppState.meals[day].night));
+                AppState.meals[day].khalaStatus.night = 'no'; 
+                AppState.members.forEach(m => { AppState.meals[day].night[m.id] = 0; });
+                isDataChanged = true;
+            }
+        }
+    }
+    
+    if (isDataChanged) {
+        await saveData(); 
+        console.warn("টাইম পার হয়ে গেছে! অটোমেটিক ০ করা হলো এবং ব্যাকআপ রাখা হলো।");
+    }
+};
+
+// প্রতি ১ মিনিট পর পর চেক করবে (পেজ রিলোড ছাড়াই শিফট হবে)
+setInterval(function() {
+    const now = new Date();
+    const hour = now.getHours();
+    const min = now.getMinutes();
+    
+    if ((hour === 13 && min === 0) || (hour === 22 && min === 0)) {
+        console.log("টাইম শিফট হয়েছে! ড্যাশবোর্ড আপডেট করা হচ্ছে...");
+        if(typeof checkAndApplyKhalaTimeout === 'function') checkAndApplyKhalaTimeout();
+        if(typeof refreshAll === 'function') window.refreshAll();
+    }
+}, 60000);
+
 const btnSubmitNot = document.getElementById('submitNoticeBtn');
 if (btnSubmitNot) {
     btnSubmitNot.addEventListener('click', async function(e) {
@@ -1507,8 +1881,150 @@ if (btnSaveBazaar) {
     });
 }
 
-window.renderTodaysMenu = function() {};
-window.renderMissedMeals = function() {};
+window.renderTodaysMenu = function() {
+    const menuDisplay = document.getElementById('todaysMenuDisplay');
+    if (!menuDisplay) return;
+    menuDisplay.innerText = AppState.todaysMenu || "আজকের মেনু এখনও ঠিক করা হয়নি...";
+};
+
+const editMenuBtn = document.getElementById('editMenuBtn');
+const saveMenuBtn = document.getElementById('saveMenuBtn');
+const menuInput = document.getElementById('menuInputText');
+const menuModal = document.getElementById('editMenuModal');
+
+if (editMenuBtn && menuModal) {
+    editMenuBtn.addEventListener('click', function() {
+        menuInput.value = AppState.todaysMenu || "";
+        menuModal.classList.add('show');
+    });
+}
+
+if (saveMenuBtn && menuModal) {
+    saveMenuBtn.addEventListener('click', async function() {
+        const newMenu = menuInput.value.trim();
+        if (!newMenu) return showToast('মেনু খালি রাখা যাবে না!', 'error');
+        
+        AppState.todaysMenu = newMenu;
+        menuModal.classList.remove('show');
+        showToast('আজকের মেনু সফলভাবে আপডেট হয়েছে!', 'success');
+        await saveData();
+        window.refreshAll();
+    });
+}
+
+const deleteMenuBtn = document.getElementById('deleteMenuBtn');
+if (deleteMenuBtn) {
+    deleteMenuBtn.addEventListener('click', function() {
+        window.customConfirm('আপনি কি আজকের মেনু মুছে ফেলতে চান?', async function() {
+            AppState.todaysMenu = ""; 
+            showToast('আজকের মেনু মুছে ফেলা হয়েছে!', 'success');
+            await saveData();
+            window.refreshAll();
+        });
+    });
+}
+
+window.renderMissedMeals = function() {
+    const container = document.getElementById('missedMealsContainer');
+    if(!container) return;
+    
+    if(!AppState.isAdmin) {
+        container.innerHTML = `<div style="padding:40px; text-align:center; background:#fff; border-radius:15px; width:100%;"><h3 style="color:var(--danger-color);">এই পেজটি শুধুমাত্র অ্যাডমিনদের জন্য!</h3></div>`;
+        return;
+    }
+
+    let html = '';
+    const processMeals = (mealsObj, monthLabel, monthKey) => {
+        if (!mealsObj) return;
+        const days = Object.keys(mealsObj).length;
+        
+        for(let day = 1; day <= days; day++) {
+            if(!mealsObj[day]) continue;
+            ['morning', 'night'].forEach(type => {
+                const status = mealsObj[day].khalaStatus[type];
+                const autoBackup = mealsObj[day][type + '_auto_backup'];
+                const manualBackup = mealsObj[day][type + '_backup'];
+                
+                if(status === 'no' && (autoBackup || manualBackup)) {
+                    const backupData = autoBackup || manualBackup;
+                    let totalBackupMeals = 0;
+                    let detailsHtml = '';
+                    
+                    AppState.members.forEach(m => {
+                        const val = backupData[m.id] || 0;
+                        totalBackupMeals += val;
+                        if(val > 0) {
+                            detailsHtml += `<span style="display:inline-block; background:rgba(67,97,238,0.1); padding:5px 10px; border-radius:8px; margin:4px; font-size:12px; font-weight:800; color:var(--primary-color); border:1px solid rgba(67,97,238,0.2);">${m.name}: ${convertToBanglaNumber(val)}</span>`;
+                        }
+                    });
+
+                    const waktName = type === 'morning' ? 'সকাল' : 'রাত';
+                    const backupTypeStr = autoBackup ? 'টাইম শেষ হয়েছিল' : 'ভুলে "খালা আসেনি" চাপ দেওয়া হয়েছিল';
+
+                    html += `
+                    <div class="member-card" style="border-left: 6px solid var(--danger-color); display:flex; flex-direction:column; justify-content:space-between;">
+                        <div style="margin-bottom:15px;">
+                            <h4 style="color:#707eae; margin-bottom:5px;">${monthLabel}</h4>
+                            <h3 style="color:var(--danger-color); margin-bottom:8px; font-size: 20px;">${convertToBanglaNumber(day)} তারিখ - ${waktName}</h3>
+                            <p style="font-size:13px; color:var(--text-muted); font-weight:700; background:#f8f9fa; padding:6px; border-radius:8px; display:inline-block;">${backupTypeStr}</p>
+                        </div>
+                        <div style="margin-bottom:20px; background: #fff; border: 1px dashed var(--primary-color); padding: 12px; border-radius: 10px;">
+                            <p style="font-weight:800; color:var(--text-primary); margin-bottom:8px; font-size:15px;">রিকভারি মিল: <span style="color:var(--success-color); font-size: 18px;">${convertToBanglaNumber(totalBackupMeals)} টি</span></p>
+                            <div style="display:flex; flex-wrap:wrap; gap: 4px;">${detailsHtml}</div>
+                        </div>
+                        <div style="display: flex; gap: 10px;">
+                            <button onclick="restoreMissedMeal(${day}, '${type}', '${autoBackup ? 'auto' : 'manual'}', '${monthKey}')" style="flex:2; padding:12px; background:var(--success-color); color:#fff; font-weight:800; border-radius:10px; cursor:pointer;">রিকভার করুন</button>
+                            <button onclick="deleteMissedMeal(${day}, '${type}', '${autoBackup ? 'auto' : 'manual'}', '${monthKey}')" style="flex:1; padding:12px; background:var(--danger-light); color:var(--danger-color); font-weight:800; border-radius:10px; cursor:pointer; border: 1px solid var(--danger-color);">মুছে ফেলুন</button>
+                        </div>
+                    </div>`;
+                }
+            });
+        }
+    };
+    processMeals(AppState.meals, "চলতি মাস", "current");
+    if (AppState.history) {
+        Object.keys(AppState.history).forEach(key => {
+            const splitKey = key.split('-');
+            const monthName = ["জানু", "ফেব্রু", "মার্চ", "এপ্রিল", "মে", "জুন", "জুলাই", "আগস্ট", "সেপ্টে", "অক্টো", "নভে", "ডিসে"][parseInt(splitKey[1])-1];
+            processMeals(AppState.history[key].meals, `${monthName} ${convertToBanglaNumber(splitKey[0])}`, key);
+        });
+    }
+    container.innerHTML = html || `<div style="padding:40px; text-align:center; background:#fff; border-radius:15px; width:100%;"><h3 style="color:var(--text-muted);">সব ঠিক আছে! কোনো মিসড মিল নেই।</h3></div>`;
+};
+
+window.restoreMissedMeal = function(day, type, backupType, monthKey) {
+    window.customConfirm(`আপনি কি নিশ্চিত? এটি রিকভার করলে স্ট্যাটাস "খালা এসেছে" হয়ে যাবে।`, async function() {
+        let targetMeals = (monthKey === 'current') ? AppState.meals : AppState.history[monthKey].meals;
+        const backupKey = type + (backupType === 'auto' ? '_auto_backup' : '_backup');
+        const backupData = targetMeals[day][backupKey];
+        
+        if(backupData) {
+            targetMeals[day][type] = JSON.parse(JSON.stringify(backupData));
+            targetMeals[day].khalaStatus[type] = 'yes';
+            
+            delete targetMeals[day][type + '_auto_backup'];
+            delete targetMeals[day][type + '_backup'];
+            
+            showToast('সফলভাবে মিল রিকভার করা হয়েছে!', 'success');
+            await saveData();
+            window.refreshAll();
+        }
+    });
+};
+
+window.deleteMissedMeal = function(day, type, backupType, monthKey) {
+    window.customConfirm('এই রিকভারি অপশনটি মুছে ফেলতে চান?', async function() {
+        let targetMeals = (monthKey === 'current') ? AppState.meals : AppState.history[monthKey].meals;
+        const backupKey = type + (backupType === 'auto' ? '_auto_backup' : '_backup');
+
+        if(targetMeals[day] && targetMeals[day][backupKey]) {
+            delete targetMeals[day][backupKey];
+            showToast('রিকভারি অপশনটি সফলভাবে মুছে ফেলা হয়েছে!', 'success');
+            await saveData();
+            window.refreshAll();
+        }
+    });
+};
 
 window.setupPermanentMealSettings = function() {
     const uid = AppState.activeUserId;
@@ -1570,13 +2086,14 @@ window.setupPermanentMealSettings = function() {
 
 function initializeApp() {
     const dateEl = document.getElementById('displayCurrentDate');
-    if (dateEl) {
-        dateEl.innerText = getBengaliDate(new Date());
-    }
-    if (typeof checkAndResetNewMonth === 'function') checkAndResetNewMonth(); 
-    if (typeof populateMonthDropdown === 'function') populateMonthDropdown(); 
+    if (dateEl) dateEl.innerText = getBengaliDate(new Date());
+    
+    if (typeof window.checkAndResetNewMonth === 'function') window.checkAndResetNewMonth();
+    if (typeof window.populateMonthDropdown === 'function') window.populateMonthDropdown(); 
     if (typeof populateMemberDropdowns === 'function') populateMemberDropdowns();
-    if (typeof setDailyMotivation === 'function') setDailyMotivation(); 
+    if (typeof window.setDailyMotivation === 'function') window.setDailyMotivation(); 
+    if (typeof window.populateCalendarMonthDropdown === 'function') window.populateCalendarMonthDropdown();
+    
     window.refreshAll();
 }
 
