@@ -88,14 +88,15 @@ function normalizeArray(value) {
 }
 
 function normalizeObject(value) {
-    if (value && typeof value === 'object' && !Array.isArray(value)) {
-        return value;
+    // Firebase theke Array ashleo jeno seta object e convert hoye jay
+    if (value && typeof value === 'object') {
+        return Object.assign({}, value);
     }
     return {};
 }
 
 function normalizeMeals(value) {
-    const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+    const source = value && typeof value === 'object' ? value : {};
     const normalized = {};
 
     for (let day = 1; day <= 31; day++) {
@@ -1381,7 +1382,7 @@ window.openEditModal = function(day, type) {
     AppState.members.forEach(function(m) {
         const currentVal = AppState.meals[day][type][m.id] || 0;
         
-        // এখানে Select এর বদলে Input Box বসানো হয়েছে
+        // Eikhane drop-down er bodole Input field dewa holo jate jekono decimal number dewa jay
         const html = `
             <div style="display:flex; justify-content:space-between; margin-bottom:15px; align-items:center; background:#f8f9fa; padding:10px 15px; border-radius:10px; border: 1px solid #edf2f9;">
                 <label style="margin:0; font-weight:800; color:var(--text-primary); font-size:16px;">${m.name}</label>
@@ -1398,7 +1399,7 @@ window.openEditModal = function(day, type) {
 
 const saveMealBtn = document.getElementById('saveMealBtn');
 if(saveMealBtn) {
-    // ডুপ্লিকেট ক্লিক এরর দূর করার জন্য CloneNode ব্যবহার করা হলো
+    // Duplicate click erate cloneNode babohar kora hocche
     const newSaveBtn = saveMealBtn.cloneNode(true);
     saveMealBtn.replaceWith(newSaveBtn);
     
@@ -1410,8 +1411,9 @@ if(saveMealBtn) {
         AppState.members.forEach(function(m) {
             const inputEl = document.getElementById(`edit_member_${m.id}`);
             if (inputEl) {
+                // parseFloat babohar kora holo jeno 0.343 ba decimal support kore
                 let val = parseFloat(inputEl.value);
-                if (isNaN(val) || val < 0) val = 0; // কেউ খালি রাখলে ০ হয়ে যাবে
+                if (isNaN(val) || val < 0) val = 0; 
                 AppState.meals[day][type][m.id] = val;
             }
         });
