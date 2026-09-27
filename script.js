@@ -772,7 +772,7 @@ if (AppState.guestMeals) {
 }
 
 function applyAdvancedGuestMeals(uid, config, isAdd) {
-    const count = parseInt(config.count) || 0;
+    const count = parseFloat(config.count) || 0; // Float যোগ করার সুবিধা
     const duration = config.duration ? parseInt(config.duration) : null;
     const isMorning = config.isMorning;
     const isNight = config.isNight;
@@ -787,48 +787,29 @@ function applyAdvancedGuestMeals(uid, config, isAdd) {
         if (!AppState.meals[day]) continue;
         if (duration !== null && mealsApplied >= duration) break;
         
-        // সকালের মিল চেক: আজকে যদি সকালের মিল লক না হয়ে থাকে (অর্থাৎ দুপুর ১টার আগে), তবে আজকের মিলেও গেস্ট যুক্ত হবে
         let isMorningLocked = (day === currentDay && currentHour >= 13) || AppState.meals[day].khalaStatus.morning !== 'pending';
-        
         if (isMorning && prefs.morning && !isMorningLocked) {
             let currentMorning = parseFloat(AppState.meals[day].morning[uid]) || 0;
             if (isAdd) {
-                // যদি আগে থেকে অফ (০) না থাকে, তবেই গেস্ট যোগ হবে
-                if (currentMorning > 0 || currentMorning === 0.5) {
-                    AppState.meals[day].morning[uid] = currentMorning + count;
-                } else if (currentMorning === 0 && count > 0) {
-                    // যদি নিজের মিল অফ থাকে কিন্তু গেস্ট দিতে চায়
-                    AppState.meals[day].morning[uid] = count;
-                }
+                AppState.meals[day].morning[uid] = currentMorning + count;
             } else {
                 let newValue = currentMorning - count;
                 AppState.meals[day].morning[uid] = newValue < 0 ? 0 : newValue;
-                // যদি গেস্ট বাদ দেওয়ার পর ভ্যালু ০ হয়ে যায়, কিন্তু রেগুলার রুটিন অন থাকে, তবে ১ করে দাও
-                if (AppState.meals[day].morning[uid] === 0 && prefs.morning) {
-                    AppState.meals[day].morning[uid] = 1;
-                }
+                if (AppState.meals[day].morning[uid] === 0 && prefs.morning) AppState.meals[day].morning[uid] = 1;
             }
             mealsApplied++;
             if (duration !== null && mealsApplied >= duration) break;
         }
         
-        // রাতের মিল চেক: আজকে যদি রাতের মিল লক না হয়ে থাকে (অর্থাৎ রাত ১০টার আগে), তবে আজকের মিলেও গেস্ট যুক্ত হবে
         let isNightLocked = (day === currentDay && currentHour >= 22) || AppState.meals[day].khalaStatus.night !== 'pending';
-        
         if (isNight && prefs.night && !isNightLocked) {
             let currentNight = parseFloat(AppState.meals[day].night[uid]) || 0;
             if (isAdd) {
-                if (currentNight > 0 || currentNight === 0.5) {
-                    AppState.meals[day].night[uid] = currentNight + count;
-                } else if (currentNight === 0 && count > 0) {
-                    AppState.meals[day].night[uid] = count;
-                }
+                AppState.meals[day].night[uid] = currentNight + count;
             } else {
                 let newValue = currentNight - count;
                 AppState.meals[day].night[uid] = newValue < 0 ? 0 : newValue;
-                if (AppState.meals[day].night[uid] === 0 && prefs.night) {
-                    AppState.meals[day].night[uid] = 1;
-                }
+                if (AppState.meals[day].night[uid] === 0 && prefs.night) AppState.meals[day].night[uid] = 1;
             }
             mealsApplied++;
             if (duration !== null && mealsApplied >= duration) break;
@@ -854,7 +835,7 @@ window.renderGuestMealBox = function() {
             else if (config.isNight) txtHtml += 'শুধু রাত';
             txtHtml += `)</span><br>`;
             if (config.duration) txtHtml += `<span style="font-size: 14px; opacity:0.8; margin-top:5px; display:block;">${convertToBanglaNumber(config.duration)} বেলার জন্য</span>`; 
-            else txtHtml += `<span style="font-size: 14px; opacity:0.8; margin-top:5px; display:block;">আনলিমিটেড সময়</span>`;
+            else txtHtml += `<span style="font-size: 14px; opacity:0.8; margin-top:5px; display:block;">আনলিমিটেড সময়</span>`;
             detailsTxt.innerHTML = txtHtml;
         }
     } else {
@@ -865,16 +846,19 @@ window.renderGuestMealBox = function() {
 
 const startGuestBtn = document.getElementById('startGuestMealBtn');
 if (startGuestBtn) {
-    startGuestBtn.addEventListener('click', async function() {
+    const newStartGuestBtn = startGuestBtn.cloneNode(true);
+    startGuestBtn.replaceWith(newStartGuestBtn);
+    
+    newStartGuestBtn.addEventListener('click', async function() {
         const countInput = document.getElementById('guestMealCountInput').value;
-        const count = parseInt(countInput);
+        const count = parseFloat(countInput); // Float allow kora holo
         const durationVal = document.getElementById('guestMealDurationInput').value;
         const duration = durationVal ? parseInt(durationVal) : null;
         const isMorning = document.getElementById('guestMorningCheck').checked;
         const isNight = document.getElementById('guestNightCheck').checked;
         
-        if (!count || count < 1 || isNaN(count)) {
-            return showToast('দয়া করে সঠিক গেস্টের সংখ্যা লিখুন!', 'error');
+        if (!count || count <= 0 || isNaN(count)) {
+            return showToast('দয়া করে সঠিক গেস্টের সংখ্যা লিখুন!', 'error');
         }
         if (!isMorning && !isNight) {
             return showToast('সকাল অথবা রাত যেকোনো একটি সিলেক্ট করুন!', 'error');
@@ -883,25 +867,24 @@ if (startGuestBtn) {
         AppState.guestMeals[AppState.activeUserId] = config; 
         applyAdvancedGuestMeals(AppState.activeUserId, config, true);
         await saveData();
-        showToast('গেস্ট মিল চালু হয়েছে!', 'success'); 
-        if (typeof window.refreshAll === 'function') {
-            window.refreshAll();
-        }
+        showToast('গেস্ট মিল চালু হয়েছে!', 'success'); 
+        window.refreshAll();
     });
 }
 
 const stopGuestBtn = document.getElementById('stopGuestMealBtn');
 if (stopGuestBtn) {
-    stopGuestBtn.addEventListener('click', async function() {
+    const newStopGuestBtn = stopGuestBtn.cloneNode(true);
+    stopGuestBtn.replaceWith(newStopGuestBtn);
+    
+    newStopGuestBtn.addEventListener('click', async function() {
         const config = AppState.guestMeals[AppState.activeUserId];
         if (config) { 
             applyAdvancedGuestMeals(AppState.activeUserId, config, false); 
             delete AppState.guestMeals[AppState.activeUserId]; 
             await saveData();
-            showToast('গেস্ট মিল অফ করা হয়েছে!', 'success'); 
-            if (typeof window.refreshAll === 'function') {
-                window.refreshAll();
-            }
+            showToast('গেস্ট মিল অফ করা হয়েছে!', 'success'); 
+            window.refreshAll();
         }
     });
 }
@@ -1389,31 +1372,52 @@ window.openEditModal = function(day, type) {
     if (isMealLocked(day, type)) return;
     document.getElementById('editMealDate').innerText = convertToBanglaNumber(day);
     document.getElementById('editMealBela').innerText = type === 'morning' ? 'সকাল' : 'রাত';
+    
     const form = document.getElementById('editMealForm');
     form.innerHTML = '';
     form.dataset.editDay = day;
     form.dataset.editType = type;
+    
     AppState.members.forEach(function(m) {
         const currentVal = AppState.meals[day][type][m.id] || 0;
-        form.insertAdjacentHTML('beforeend', `<div style="display:flex; justify-content:space-between; margin-bottom:15px;"><label>${m.name}</label><select id="edit_member_${m.id}"><option value="1" ${currentVal===1?'selected':''}>ফুল</option><option value="0" ${currentVal===0?'selected':''}>অফ</option></select></div>`);
+        
+        // এখানে Select এর বদলে Input Box বসানো হয়েছে
+        const html = `
+            <div style="display:flex; justify-content:space-between; margin-bottom:15px; align-items:center; background:#f8f9fa; padding:10px 15px; border-radius:10px; border: 1px solid #edf2f9;">
+                <label style="margin:0; font-weight:800; color:var(--text-primary); font-size:16px;">${m.name}</label>
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <input type="number" step="any" min="0" class="form-control" id="edit_member_${m.id}" value="${currentVal}" style="width:85px; padding:8px; font-weight:800; text-align:center; border:2px solid var(--primary-light); color:var(--primary-color); border-radius:8px;">
+                    <span style="font-size:15px; font-weight:700; color:var(--text-muted);">টি</span>
+                </div>
+            </div>
+        `;
+        form.insertAdjacentHTML('beforeend', html);
     });
     document.getElementById('editMealModal').classList.add('show');
 };
 
 const saveMealBtn = document.getElementById('saveMealBtn');
 if(saveMealBtn) {
-    saveMealBtn.addEventListener('click', async function() {
+    // ডুপ্লিকেট ক্লিক এরর দূর করার জন্য CloneNode ব্যবহার করা হলো
+    const newSaveBtn = saveMealBtn.cloneNode(true);
+    saveMealBtn.replaceWith(newSaveBtn);
+    
+    newSaveBtn.addEventListener('click', async function() {
         const form = document.getElementById('editMealForm');
         const day = parseInt(form.dataset.editDay);
         const type = form.dataset.editType;
+        
         AppState.members.forEach(function(m) {
-            const select = document.getElementById(`edit_member_${m.id}`);
-            if (select) {
-                AppState.meals[day][type][m.id] = parseFloat(select.value);
+            const inputEl = document.getElementById(`edit_member_${m.id}`);
+            if (inputEl) {
+                let val = parseFloat(inputEl.value);
+                if (isNaN(val) || val < 0) val = 0; // কেউ খালি রাখলে ০ হয়ে যাবে
+                AppState.meals[day][type][m.id] = val;
             }
         });
+        
         document.getElementById('editMealModal').classList.remove('show');
-        showToast('মিল আপডেট হয়েছে!', 'success');
+        showToast('মিল আপডেট হয়েছে!', 'success');
         await saveData();
         window.refreshAll();
     });
