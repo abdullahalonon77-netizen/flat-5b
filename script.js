@@ -1254,7 +1254,7 @@ window.refreshAll = function() {
     if (typeof window.setupPermanentMealSettings === 'function') window.setupPermanentMealSettings();
     if (typeof window.renderTodaysMenu === 'function') window.renderTodaysMenu();
     if (typeof window.renderMissedMeals === 'function') window.renderMissedMeals();
-
+    if (typeof window.populateBazaarMonthDropdown === 'function') window.populateBazaarMonthDropdown();
     // নোটিশ বোর্ড লজিক
     const noticeContainer = document.getElementById('noticeContainer');
     if (noticeContainer) {
@@ -1621,27 +1621,50 @@ window.updateQuickMealToggle = function() {
     }
 };
 
+// বাজারের মাসের ড্রপডাউন তৈরি করার ফাংশন
+window.populateBazaarMonthDropdown = function() {
+    const selectEl = document.getElementById('bazaarMonthSelect');
+    if (!selectEl) return;
+
+    // আগে থেকে সিলেক্ট করা মাসটি মনে রাখা
+    const currentSelection = selectEl.value;
+    selectEl.innerHTML = '';
+    
+    const monthNames = ["জানুয়ারি", "ফেব্রুয়ারি", "মার্চ", "এপ্রিল", "মে", "জুন", "জুলাই", "আগস্ট", "সেপ্টেম্বর", "অক্টোবর", "নভেম্বর", "ডিসেম্বর"];
+    const currentM = AppState.currentMonth; 
+    const currentY = AppState.currentYear;
+    
+    // চলতি মাস অ্যাড করা
+    selectEl.insertAdjacentHTML('beforeend', `<option value="current">${monthNames[currentM - 1]} ${convertToBanglaNumber(currentY)} (চলতি মাস)</option>`);
+    
+    // হিস্ট্রি থেকে আগের মাসগুলো অ্যাড করা
+    if (AppState.history) {
+        Object.keys(AppState.history).sort().reverse().forEach(key => {
+            const splitKey = key.split('-');
+            const y = splitKey[0];
+            const m = splitKey[1];
+            const monthName = monthNames[parseInt(m) - 1];
+            selectEl.insertAdjacentHTML('beforeend', `<option value="${key}">${monthName} ${convertToBanglaNumber(y)}</option>`);
+        });
+    }
+
+    // ড্রপডাউনে আগের সিলেকশন ধরে রাখা
+    if (currentSelection && Array.from(selectEl.options).some(opt => opt.value === currentSelection)) {
+        selectEl.value = currentSelection;
+    } else {
+        selectEl.value = "current";
+    }
+    
+    selectEl.removeEventListener('change', window.renderBazaarList);
+    selectEl.addEventListener('change', window.renderBazaarList);
+};
+
+// বাজারের লিস্ট দেখানোর ফাংশন
 window.renderBazaarList = function() {
     const tbody = document.getElementById('bazaarTableBody');
     const totalEl = document.getElementById('tableTotalBazaar');
     const monthSelect = document.getElementById('bazaarMonthSelect');
     if (!tbody || !totalEl) return;
-
-    // ড্রপডাউন অপশনগুলো তৈরি করা (যদি আগে থেকে না থাকে)
-    if (monthSelect && monthSelect.options.length === 0) {
-        const monthNames = ["জানুয়ারি", "ফেব্রুয়ারি", "মার্চ", "এপ্রিল", "মে", "জুন", "জুলাই", "আগস্ট", "সেপ্টেম্বর", "অক্টোবর", "নভেম্বর", "ডিসেম্বর"];
-        monthSelect.insertAdjacentHTML('beforeend', `<option value="current" selected>${monthNames[AppState.currentMonth - 1]} ${convertToBanglaNumber(AppState.currentYear)} (চলতি মাস)</option>`);
-        
-        if (AppState.history) {
-            Object.keys(AppState.history).sort().reverse().forEach(key => {
-                const splitKey = key.split('-');
-                const y = splitKey[0];
-                const m = splitKey[1];
-                monthSelect.insertAdjacentHTML('beforeend', `<option value="${key}">${monthNames[parseInt(m) - 1]} ${convertToBanglaNumber(y)}</option>`);
-            });
-        }
-        monthSelect.addEventListener('change', window.renderBazaarList);
-    }
 
     const selectedMonth = monthSelect ? monthSelect.value : 'current';
     let targetRecords = (selectedMonth === 'current') ? AppState.bazaarRecords : (AppState.history[selectedMonth] ? AppState.history[selectedMonth].bazaarRecords : []);
@@ -1677,6 +1700,45 @@ window.renderBazaarList = function() {
         `);
     });
     totalEl.innerText = formatCurrency(total);
+};
+
+// বাজার এডিট করার লজিক
+window.editBazaar = async function(id, monthKey) {
+    let targetRecords = (monthKey === 'current') ? AppState.bazaarRecords : AppState.history[monthKey].bazaarRecords;
+    const record = targetRecords.find(r => r.id === id);
+    if(!record) return;
+
+    const newAmount = prompt("নতুন টাকার পরিমাণ লিখুন (৳):", record.amount);
+    if(newAmount === null) return;
+
+    const newDetails = prompt("বিবরণ আপডেট করুন:", record.details);
+    if(newDetails === null) return;
+    
+    const parsedAmount = parseFloat(newAmount);
+    if(!isNaN(parsedAmount) && parsedAmount > 0) {
+        record.amount = parsedAmount;
+        record.details = newDetails.trim() || "-";
+        
+        showToast('বাজার সফলভাবে আপডেট হয়েছে!', 'success');
+        await window.saveData();
+        window.refreshAll();
+    } else {
+        showToast('সঠিক টাকার পরিমাণ দিন!', 'error');
+    }
+};
+
+// বাজার ডিলিট করার লজিক
+window.deleteBazaar = function(id, monthKey) {
+    window.customConfirm('আপনি কি নিশ্চিত যে এই বাজার রেকর্ডটি মুছে ফেলবেন?', async function() {
+        if(monthKey === 'current') {
+            AppState.bazaarRecords = AppState.bazaarRecords.filter(r => r.id !== id);
+        } else if (AppState.history[monthKey]) {
+            AppState.history[monthKey].bazaarRecords = AppState.history[monthKey].bazaarRecords.filter(r => r.id !== id);
+        }
+        showToast('বাজার রেকর্ড মুছে ফেলা হয়েছে', 'success');
+        await window.saveData();
+        window.refreshAll();
+    });
 };
 
 // বাজার এডিট করার লজিক
@@ -2068,7 +2130,9 @@ if (btnSaveBazaar) {
 
         let dateString = new Date().toISOString().split('T')[0];
         if (selectedMonthKey !== 'current') {
-            dateString = `${selectedMonthKey}-28`; // পুরনো মাসের জন্য একটি ডিফল্ট তারিখ
+            // আগের মাসের এন্ট্রি হলে মাসের শেষের দিকের একটি তারিখ বসিয়ে দেওয়া হবে
+            const splitVal = selectedMonthKey.split('-');
+            dateString = `${splitVal[0]}-${splitVal[1]}-28`; 
         }
 
         const newRecord = { 
@@ -2093,7 +2157,7 @@ if (btnSaveBazaar) {
         
         document.getElementById('addBazaarModal').classList.remove('show');
         showToast('বাজার সফলভাবে যোগ হয়েছে!', 'success');
-        await saveData();
+        await window.saveData();
         window.refreshAll();
     });
 }
