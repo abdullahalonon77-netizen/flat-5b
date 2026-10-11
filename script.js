@@ -1624,16 +1624,98 @@ window.updateQuickMealToggle = function() {
 window.renderBazaarList = function() {
     const tbody = document.getElementById('bazaarTableBody');
     const totalEl = document.getElementById('tableTotalBazaar');
+    const monthSelect = document.getElementById('bazaarMonthSelect');
     if (!tbody || !totalEl) return;
+
+    // ড্রপডাউন অপশনগুলো তৈরি করা (যদি আগে থেকে না থাকে)
+    if (monthSelect && monthSelect.options.length === 0) {
+        const monthNames = ["জানুয়ারি", "ফেব্রুয়ারি", "মার্চ", "এপ্রিল", "মে", "জুন", "জুলাই", "আগস্ট", "সেপ্টেম্বর", "অক্টোবর", "নভেম্বর", "ডিসেম্বর"];
+        monthSelect.insertAdjacentHTML('beforeend', `<option value="current" selected>${monthNames[AppState.currentMonth - 1]} ${convertToBanglaNumber(AppState.currentYear)} (চলতি মাস)</option>`);
+        
+        if (AppState.history) {
+            Object.keys(AppState.history).sort().reverse().forEach(key => {
+                const splitKey = key.split('-');
+                const y = splitKey[0];
+                const m = splitKey[1];
+                monthSelect.insertAdjacentHTML('beforeend', `<option value="${key}">${monthNames[parseInt(m) - 1]} ${convertToBanglaNumber(y)}</option>`);
+            });
+        }
+        monthSelect.addEventListener('change', window.renderBazaarList);
+    }
+
+    const selectedMonth = monthSelect ? monthSelect.value : 'current';
+    let targetRecords = (selectedMonth === 'current') ? AppState.bazaarRecords : (AppState.history[selectedMonth] ? AppState.history[selectedMonth].bazaarRecords : []);
+    
+    if (!targetRecords) targetRecords = [];
+
     tbody.innerHTML = '';
     let total = 0;
-    AppState.bazaarRecords.forEach(function(record) {
+    
+    targetRecords.forEach(function(record) {
         const member = AppState.members.find(m => m.id === record.memberId);
         const memName = member ? member.name : 'Unknown';
-        total += record.amount;
-        tbody.insertAdjacentHTML('beforeend', `<tr><td>${record.date}</td><td>${memName}</td><td>${record.details}</td><td>${formatCurrency(record.amount)}</td><td></td></tr>`);
+        total += (record.amount || 0);
+        
+        let actionHtml = '';
+        if (AppState.isAdmin) {
+            actionHtml = `
+                <button onclick="editBazaar(${record.id}, '${selectedMonth}')" style="background:var(--primary-light); color:#fff; border:none; padding:6px 12px; border-radius:6px; cursor:pointer; margin-right:5px; font-size:13px; font-weight: bold;">এডিট</button>
+                <button onclick="deleteBazaar(${record.id}, '${selectedMonth}')" style="background:var(--danger-light); color:var(--danger-color); border:none; padding:6px 12px; border-radius:6px; cursor:pointer; font-size:13px; font-weight: bold;">মুছুন</button>
+            `;
+        } else {
+            actionHtml = `<span style="color: gray; font-size: 12px;">অ্যাডমিন অনলি</span>`;
+        }
+        
+        tbody.insertAdjacentHTML('beforeend', `
+            <tr>
+                <td>${record.date}</td>
+                <td>${memName}</td>
+                <td>${record.details}</td>
+                <td style="font-weight:800; color:var(--success-color);">${formatCurrency(record.amount)}</td>
+                <td>${actionHtml}</td>
+            </tr>
+        `);
     });
     totalEl.innerText = formatCurrency(total);
+};
+
+// বাজার এডিট করার লজিক
+window.editBazaar = async function(id, monthKey) {
+    let targetRecords = (monthKey === 'current') ? AppState.bazaarRecords : AppState.history[monthKey].bazaarRecords;
+    const record = targetRecords.find(r => r.id === id);
+    if(!record) return;
+
+    const newAmount = prompt("নতুন টাকার পরিমাণ লিখুন:", record.amount);
+    if(newAmount === null) return;
+
+    const newDetails = prompt("বিবরণ আপডেট করুন:", record.details);
+    if(newDetails === null) return;
+    
+    const parsedAmount = parseFloat(newAmount);
+    if(!isNaN(parsedAmount) && parsedAmount > 0) {
+        record.amount = parsedAmount;
+        record.details = newDetails.trim() || "-";
+        
+        showToast('বাজার সফলভাবে আপডেট হয়েছে!', 'success');
+        await saveData();
+        window.refreshAll();
+    } else {
+        showToast('সঠিক টাকার পরিমাণ দিন!', 'error');
+    }
+};
+
+// বাজার ডিলিট করার লজিক
+window.deleteBazaar = function(id, monthKey) {
+    window.customConfirm('আপনি কি নিশ্চিত যে এই বাজার রেকর্ডটি মুছে ফেলবেন?', async function() {
+        if(monthKey === 'current') {
+            AppState.bazaarRecords = AppState.bazaarRecords.filter(r => r.id !== id);
+        } else if (AppState.history[monthKey]) {
+            AppState.history[monthKey].bazaarRecords = AppState.history[monthKey].bazaarRecords.filter(r => r.id !== id);
+        }
+        showToast('বাজার রেকর্ড মুছে ফেলা হয়েছে', 'success');
+        await saveData();
+        window.refreshAll();
+    });
 };
 
 
@@ -1970,19 +2052,45 @@ if (btnSubmitNot) {
 
 const btnSaveBazaar = document.getElementById('saveBazaarBtn');
 if (btnSaveBazaar) {
-    btnSaveBazaar.addEventListener('click', async function(e) {
+    const newBtnSaveBazaar = btnSaveBazaar.cloneNode(true);
+    btnSaveBazaar.replaceWith(newBtnSaveBazaar);
+
+    newBtnSaveBazaar.addEventListener('click', async function(e) {
         e.preventDefault();
         const memId = parseInt(document.getElementById('bazaarMemberSelect').value);
         const details = document.getElementById('bazaarDetails').value.trim() || "-";
         const amount = parseFloat(document.getElementById('bazaarAmount').value);
+        
+        const monthSelectEl = document.getElementById('bazaarMonthSelect');
+        const selectedMonthKey = monthSelectEl ? monthSelectEl.value : 'current';
+        
         if (isNaN(amount) || amount <= 0) return showToast('সঠিক টাকার পরিমাণ দিন!', 'error');
-        AppState.bazaarRecords.push({ 
+
+        let dateString = new Date().toISOString().split('T')[0];
+        if (selectedMonthKey !== 'current') {
+            dateString = `${selectedMonthKey}-28`; // পুরনো মাসের জন্য একটি ডিফল্ট তারিখ
+        }
+
+        const newRecord = { 
             id: Date.now(), 
             memberId: memId, 
             details: details, 
             amount: amount, 
-            date: new Date().toISOString().split('T')[0] 
-        });
+            date: dateString 
+        };
+        
+        if (selectedMonthKey === 'current') {
+            AppState.bazaarRecords.push(newRecord);
+        } else {
+            if (!AppState.history[selectedMonthKey]) {
+                AppState.history[selectedMonthKey] = { meals: {}, bazaarRecords: [], finalRate: 0 };
+            }
+            if (!AppState.history[selectedMonthKey].bazaarRecords) {
+                AppState.history[selectedMonthKey].bazaarRecords = [];
+            }
+            AppState.history[selectedMonthKey].bazaarRecords.push(newRecord);
+        }
+        
         document.getElementById('addBazaarModal').classList.remove('show');
         showToast('বাজার সফলভাবে যোগ হয়েছে!', 'success');
         await saveData();
